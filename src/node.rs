@@ -1,12 +1,12 @@
 use anyhow::{Context, Result};
 use futures::prelude::*;
 use libp2p::{
-    core::upgrade,
+    core::{muxing::StreamMuxerBox, upgrade},
     floodsub::{self, Floodsub, FloodsubEvent},
     identity,
     mdns::{Mdns, MdnsEvent},
     mplex,
-    swarm::{NetworkBehaviour, NetworkBehaviourEventProcess, SwarmBuilder},
+    swarm::{ExpandedSwarm, NetworkBehaviour, NetworkBehaviourEventProcess, SwarmBuilder},
     tcp::TokioTcpConfig,
     NetworkBehaviour, PeerId, Swarm, Transport,
 };
@@ -14,12 +14,16 @@ use libp2p_secio::SecioConfig;
 use log::info;
 use tokio::io::{self, AsyncBufReadExt};
 
+type Libp2pTransport = libp2p::core::transport::Boxed<(PeerId, StreamMuxerBox)>;
+
 // We create a custom network behaviour that combines floodsub and mDNS.
 // The derive generates a delegating `NetworkBehaviour` impl which in turn
 // requires the implementations of `NetworkBehaviourEventProcess` for
 // the events of each behaviour.
 #[derive(NetworkBehaviour)]
 struct MyBehaviour {
+    #[behaviour(ignore)]
+    topic:    floodsub::Topic,
     floodsub: Floodsub,
     mdns:     Mdns,
 }
@@ -57,6 +61,36 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
     }
 }
 
+impl MyBehaviour {
+    async fn new(peer_id: PeerId) -> Result<Self> {
+        // Create a Floodsub topic
+        let floodsub_topic = floodsub::Topic::new("chat");
+
+        let mdns = Mdns::new()
+            .await
+            .context("Creating mDNS node discovery behaviour")?;
+
+        let mut behaviour = MyBehaviour {
+            topic: floodsub_topic.clone(),
+            floodsub: Floodsub::new(peer_id),
+            mdns,
+        };
+
+        behaviour.floodsub.subscribe(floodsub_topic.clone());
+
+        Ok(behaviour)
+    }
+}
+
+pub async fn make_transport(peer_id_keys: identity::Keypair) -> Result<Libp2pTransport> {
+    Ok(TokioTcpConfig::new()
+        .nodelay(true)
+        .upgrade(upgrade::Version::V1)
+        .authenticate(SecioConfig::new(peer_id_keys.clone()))
+        .multiplex(mplex::MplexConfig::new())
+        .boxed())
+}
+
 pub async fn run() -> Result<()> {
     // Generate peer id
     let peer_id_keys = identity::Keypair::generate_ed25519();
@@ -64,36 +98,24 @@ pub async fn run() -> Result<()> {
     info!("Peer Id: {}", peer_id.clone());
 
     // Create a transport
-    let transport = TokioTcpConfig::new()
-        .nodelay(true)
-        .upgrade(upgrade::Version::V1)
-        .authenticate(SecioConfig::new(peer_id_keys.clone()))
-        .multiplex(mplex::MplexConfig::new())
-        .boxed();
+    let transport = make_transport(peer_id_keys.clone())
+        .await
+        .context("Creating libp2p transport")?;
 
-    // Create a Floodsub topic
-    let floodsub_topic = floodsub::Topic::new("chat");
+    // Create node behaviour
+    let behaviour = MyBehaviour::new(peer_id.clone())
+        .await
+        .context("Creating node behaviour")?;
+
+    // Executor for connection background tasks.
+    let executor = Box::new(|fut| {
+        tokio::spawn(fut);
+    });
 
     // Create a Swarm to manage peers and events.
-    let mut swarm = {
-        let mdns = Mdns::new()
-            .await
-            .context("Creating mDNS node discovery behaviour")?;
-        let mut behaviour = MyBehaviour {
-            floodsub: Floodsub::new(peer_id.clone()),
-            mdns,
-        };
-
-        behaviour.floodsub.subscribe(floodsub_topic.clone());
-
-        SwarmBuilder::new(transport, behaviour, peer_id)
-            // We want the connection background tasks to be spawned
-            // onto the tokio runtime.
-            .executor(Box::new(|fut| {
-                tokio::spawn(fut);
-            }))
-            .build()
-    };
+    let mut swarm: ExpandedSwarm<_, _, _, _> = SwarmBuilder::new(transport, behaviour, peer_id)
+        .executor(executor)
+        .build();
 
     // Read full lines from stdin
     let mut stdin = io::BufReader::new(io::stdin()).lines();
@@ -112,7 +134,7 @@ pub async fn run() -> Result<()> {
     loop {
         let to_publish = {
             tokio::select! {
-                line = stdin.try_next() => Some((floodsub_topic.clone(), line?.expect("Stdin closed"))),
+                line = stdin.try_next() => Some((swarm.topic.clone(), line?.expect("Stdin closed"))),
                 event = swarm.next() => {
                     println!("New Event: {:?}", event);
                     None
