@@ -11,7 +11,7 @@ use libp2p::{
     NetworkBehaviour, PeerId, Swarm, Transport,
 };
 use libp2p_secio::SecioConfig;
-use log::info;
+use log::{debug, info};
 use tokio::io::{self, AsyncBufReadExt};
 
 type Libp2pTransport = libp2p::core::transport::Boxed<(PeerId, StreamMuxerBox)>;
@@ -80,6 +80,10 @@ impl MyBehaviour {
 
         Ok(behaviour)
     }
+
+    fn publish(&mut self, msg: &str) {
+        self.floodsub.publish(self.topic.clone(), msg.as_bytes());
+    }
 }
 
 pub async fn make_transport(peer_id_keys: identity::Keypair) -> Result<Libp2pTransport> {
@@ -108,17 +112,15 @@ pub async fn run() -> Result<()> {
         .context("Creating node behaviour")?;
 
     // Executor for connection background tasks.
-    let executor = Box::new(|fut| {
-        tokio::spawn(fut);
+    let executor = Box::new(|future| {
+        debug!("Spawning background task");
+        tokio::spawn(future);
     });
 
     // Create a Swarm to manage peers and events.
-    let mut swarm: ExpandedSwarm<_, _, _, _> = SwarmBuilder::new(transport, behaviour, peer_id)
+    let mut swarm: Swarm<MyBehaviour> = SwarmBuilder::new(transport, behaviour, peer_id)
         .executor(executor)
         .build();
-
-    // Read full lines from stdin
-    let mut stdin = io::BufReader::new(io::stdin()).lines();
 
     // Listen on all interfaces and whatever port the OS assigns
     Swarm::listen_on(
@@ -129,28 +131,33 @@ pub async fn run() -> Result<()> {
     )
     .context("Starting to listen")?;
 
+    // Read full lines from stdin
+    let mut stdin = io::BufReader::new(io::stdin()).lines();
+
+    // Catch SIGTERM so the container can shutdown without an init process.
+    let sigterm = tokio::signal::ctrl_c();
+    tokio::pin!(sigterm);
+
     // Kick it off
-    let mut listening = false;
     loop {
-        let to_publish = {
-            tokio::select! {
-                line = stdin.try_next() => Some((swarm.topic.clone(), line?.expect("Stdin closed"))),
-                event = swarm.next() => {
-                    println!("New Event: {:?}", event);
-                    None
-                }
-            }
-        };
-        if let Some((topic, line)) = to_publish {
-            swarm.floodsub.publish(topic, line.as_bytes());
-        }
-        if !listening {
-            for addr in Swarm::listeners(&swarm) {
-                println!("Listening on {:?}", addr);
-                listening = true;
+        tokio::select! {
+            line = stdin.try_next() => {
+                info!("Stdin: {:?}", &line);
+                let msg = line?.expect("Stdin closed");
+                swarm.publish(&msg);
+            },
+            event = swarm.next() => {
+                info!("New Event: {:?}", event);
+            },
+            _ = &mut sigterm => {
+                info!("SIGTERM received, shutting down");
+                // TODO: Shut down swarm?
+                break;
             }
         }
     }
+    info!("Done.");
+    // TODO: Somehow it blocks here waiting for stdin.
 
     Ok(())
 }
