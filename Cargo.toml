@@ -26,8 +26,9 @@ anyhow = "1.0"
 env_logger = "0.8"
 futures = "0.3"
 libp2p = { version = "0.32", features = [ "tcp-tokio" ] }
+libp2p-secio = "0.25"
 log = "0.4"
-tokio = { version = "0.3", features = ["macros", "rt-multi-thread", "signal"] }
+tokio = { version = "0.3", features = ["macros", "rt-multi-thread", "signal", "io-std", "io-util"] }
 tokio-compat-02 = "0.1"
 structopt = "0.3"
 criterion = { version = "0.3", optional = true }

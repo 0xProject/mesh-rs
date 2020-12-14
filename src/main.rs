@@ -1,6 +1,6 @@
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
-mod server;
+mod node;
 
 use anyhow::{Context, Result};
 use env_logger;
@@ -22,6 +22,10 @@ struct Options {
 enum Command {
     /// Show version information
     Test,
+}
+
+async fn async_main(_options: Options) -> Result<()> {
+    node::run().await
 }
 
 fn main() -> Result<()> {
@@ -73,7 +77,7 @@ fn main() -> Result<()> {
         .enable_all()
         .build()
         .context("Error creating Tokio runtime")?
-        .block_on(server::async_main())
+        .block_on(async_main(options))
         .context("Error in main thread")?;
 
     // Terminate successfully
