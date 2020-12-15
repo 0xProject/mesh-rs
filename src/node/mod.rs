@@ -44,13 +44,8 @@ pub async fn run() -> Result<()> {
     )
     .context("Starting to listen")?;
 
-    // 16Uiu2HAkykwoBxwyvoEbaEkuKMeKrmJDPZ2uKFPUKtqd2JbGHUNH
-    // Protocols: /0x-mesh-dht/version/1  /ipfs/id/1.0.0
-    let bootnode: Multiaddr = "/dns4/bootstrap-2.mesh.0x.org/tcp/60558"
-        .parse()
-        .context("Parsing bootnode address")?;
-
-    Swarm::dial_addr(&mut swarm, bootnode).context("Dialing bootnode")?;
+    // Do something interesting
+    // swarm.search_random_peer();
 
     // Catch SIGTERM so the container can shutdown without an init process.
     let sigterm = tokio::signal::ctrl_c();

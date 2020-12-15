@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use libp2p::{
-    gossipsub::{Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity},
+    gossipsub::{Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity, Topic},
     identify::{Identify, IdentifyEvent},
     identity::Keypair,
     kad::{record::store::MemoryStore, Kademlia, KademliaConfig, KademliaEvent},
@@ -13,6 +13,21 @@ use log::{debug, info};
 use std::time::Duration;
 
 const DHT_PROTOCOL_ID: &[u8] = b"/0x-mesh-dht/version/1";
+const TOPIC: &str = "/0x-orders/version/3/chain/1/schema/e30=";
+const BOOTNODES: &'static [(&str, &str)] = &[
+    (
+        "16Uiu2HAmGx8Z6gdq5T5AQE54GMtqDhDFhizywTy1o28NJbAMMumF",
+        "/dns4/bootstrap-0.mesh.0x.org/tcp/60558",
+    ),
+    (
+        "16Uiu2HAkwsDZk4LzXy2rnWANRsyBjB4fhjnsNeJmjgsBqxPGTL32",
+        "/dns4/bootstrap-1.mesh.0x.org/tcp/60558",
+    ),
+    (
+        "16Uiu2HAkykwoBxwyvoEbaEkuKMeKrmJDPZ2uKFPUKtqd2JbGHUNH",
+        "/dns4/bootstrap-2.mesh.0x.org/tcp/60558",
+    ),
+];
 
 // protocols: ["/ipfs/id/1.0.0", "/ipfs/id/push/1.0.0", "/p2p/id/delta/1.0.0",
 // "/ipfs/ping/1.0.0", "/libp2p/circuit/relay/0.1.0", "/0x-mesh-dht/version/1",
@@ -29,7 +44,6 @@ pub(crate) struct MyBehaviour {
     identify: Identify,
     ping:     Ping,
     pubsub:   Gossipsub,
-    // TODO: Ping
 }
 
 impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
@@ -63,7 +77,17 @@ impl NetworkBehaviourEventProcess<PingEvent> for MyBehaviour {
 impl NetworkBehaviourEventProcess<GossipsubEvent> for MyBehaviour {
     /// Called when `identify` produces and event.
     fn inject_event(&mut self, event: GossipsubEvent) {
-        debug!("Gossipsub: {:?}", event);
+        match event {
+            GossipsubEvent::Message(peer_id, id, message) => {
+                info!(
+                    "Got message: {} with id: {} from peer: {:?}",
+                    String::from_utf8_lossy(&message.data),
+                    id,
+                    peer_id
+                );
+            }
+            event => debug!("Gossipsub: {:?}", event),
+        }
     }
 }
 
@@ -83,7 +107,18 @@ impl MyBehaviour {
         kad_config.set_query_timeout(Duration::from_secs(5));
         debug!("Kademlia config: {:?}", &kad_config);
         let kad_store = MemoryStore::new(peer_id.clone());
-        let kademlia = Kademlia::with_config(peer_id.clone(), kad_store, kad_config);
+        let mut kademlia = Kademlia::with_config(peer_id.clone(), kad_store, kad_config);
+
+        // Add bootnodes
+        for (peer_id, multiaddr) in BOOTNODES {
+            let peer_id = peer_id.parse().context("Parsing bootnode peer id")?;
+            let multiaddr = multiaddr.parse().context("Parsing bootnode address")?;
+            kademlia.add_address(&peer_id, multiaddr);
+        }
+
+        // Join DHT
+        let bootstrap = kademlia.bootstrap().context("Joining Kademlia DHT")?;
+        info!("Kademlia Bootstrap query {:?}", bootstrap);
 
         // Identify protocol
         let identify = Identify::new("/ipfs/0.1.0".into(), "mesh-rs".into(), public_key);
@@ -92,13 +127,15 @@ impl MyBehaviour {
         let ping = Ping::new(PingConfig::new());
 
         // GossipSub
+        let topic = Topic::new(TOPIC.into());
         let gossipsub_config = GossipsubConfigBuilder::new()
             .max_transmit_size(262144)
             .build();
-        let pubsub = Gossipsub::new(
+        let mut pubsub = Gossipsub::new(
             MessageAuthenticity::Signed(peer_key.clone()),
             gossipsub_config,
         );
+        pubsub.subscribe(topic);
 
         let mut behaviour = MyBehaviour {
             mdns,
@@ -108,5 +145,12 @@ impl MyBehaviour {
             pubsub,
         };
         Ok(behaviour)
+    }
+
+    pub(crate) fn search_random_peer(&mut self) {
+        let query: PeerId = Keypair::generate_ed25519().public().into();
+        // It's not the query that matters, it's the friends we make along the way.
+        let query_id = self.kademlia.get_closest_peers(query.clone());
+        debug!("Query {:?} {:?}", query_id, query);
     }
 }
