@@ -1,10 +1,18 @@
 # 0x-mesh implemented in Rust
 
-![lines of code](https://img.shields.io/tokei/lines/github/recmo/rust-app-template)
-[![dependency status](https://deps.rs/repo/github/recmo/rust-app-template/status.svg)](https://deps.rs/repo/github/recmo/rust-app-template)
-[![codecov](https://img.shields.io/codecov/c/github/recmo/rust-app-template)](https://codecov.io/gh/Recmo/rust-app-template)
-[![build](https://img.shields.io/github/workflow/status/recmo/rust-app-template/build)](https://github.com/Recmo/rust-app-template/actions?query=workflow%3Abuild)
-[![deploy-gke](https://img.shields.io/github/workflow/status/recmo/rust-app-template/deploy-gke)](https://github.com/Recmo/rust-app-template/actions?query=workflow%3Adeploy-gke)
+![lines of code](https://img.shields.io/tokei/lines/github/0xProject/mesh-rs)
+[![dependency status](https://deps.rs/repo/github/0xProject/mesh-rs/status.svg)](https://deps.rs/repo/github/0xProject/mesh-rs)
+[![codecov](https://img.shields.io/codecov/c/github/0xProject/mesh-rs)](https://codecov.io/gh/0xProject/mesh-rs)
+[![build](https://img.shields.io/github/workflow/status/0xProject/mesh-rs/build)](https://github.com/0xProject/mesh-rs/actions?query=workflow%3Abuild)
+[![deploy-gke](https://img.shields.io/github/workflow/status/0xProject/mesh-rs/deploy-gke)](https://github.com/0xProject/mesh-rs/actions?query=workflow%3Adeploy-gke)
+
+## Quickstart
+
+```
+cargo run -- -vvv
+```
+
+Should connect to the 0xMesh main network and start logging order (among many other things).
 
 ## Blocking issues
 
