@@ -15,7 +15,7 @@ pub async fn run() -> Result<()> {
     info!("Peer Id: {}", peer_id.clone());
 
     // Create a transport
-    let transport = make_transport(peer_id_keys.clone())
+    let (transport, bandwidth_monitor) = make_transport(peer_id_keys.clone())
         .await
         .context("Creating libp2p transport")?;
 
@@ -66,6 +66,11 @@ pub async fn run() -> Result<()> {
     }
     info!("Done.");
     info!("Known peers: {:?}", swarm.known_peers());
+    info!(
+        "Bandwidth: {} inbound, {} outbound",
+        bandwidth_monitor.total_inbound(),
+        bandwidth_monitor.total_outbound()
+    );
     Ok(())
 }
 

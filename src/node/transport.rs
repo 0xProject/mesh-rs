@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use futures::prelude::*;
 use libp2p::{
+    bandwidth::BandwidthSinks,
     core::{
         either::{EitherError, EitherOutput},
         muxing::StreamMuxerBox,
@@ -11,17 +12,20 @@ use libp2p::{
     identity, mplex, noise,
     tcp::TokioTcpConfig,
     websocket::WsConfig,
-    yamux, InboundUpgradeExt, OutboundUpgradeExt, PeerId, Transport,
+    yamux, InboundUpgradeExt, OutboundUpgradeExt, PeerId, Transport, TransportExt,
 };
 use libp2p_secio as secio;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
+
 use upgrade::{MapInboundUpgrade, MapOutboundUpgrade};
 
 pub(crate) type Libp2pTransport = libp2p::core::transport::Boxed<(PeerId, StreamMuxerBox)>;
 
 /// Create a transport for TCP/IP and WebSockets over TCP/IP with Secio
 /// encryption and either yamux or else mplex multiplexing.
-pub(crate) async fn make_transport(peer_id_keys: identity::Keypair) -> Result<Libp2pTransport> {
+pub(crate) async fn make_transport(
+    peer_id_keys: identity::Keypair,
+) -> Result<(Libp2pTransport, Arc<BandwidthSinks>)> {
     // Create transport with TCP, DNS and WS
     // TODO: WASM support
     // TODO: Circuit-relay (waiting for upstream PR)
@@ -39,6 +43,9 @@ pub(crate) async fn make_transport(peer_id_keys: identity::Keypair) -> Result<Li
         // Combine transports
         tcp_dns_transport.or_transport(ws_transport)
     };
+
+    // Add bandwidth monitoring
+    let (transport, bandwidth_logger) = transport.with_bandwidth_logging();
 
     // Create authenticator with Noise and Secio
     let authenticator = {
@@ -91,10 +98,12 @@ pub(crate) async fn make_transport(peer_id_keys: identity::Keypair) -> Result<Li
 
     // TODO: Log the connection paths used
 
-    Ok(transport
+    let transport = transport
         .upgrade(upgrade::Version::V1)
         .authenticate(authenticator)
         .multiplex(multiplexer)
         .timeout(Duration::from_secs(20))
-        .boxed())
+        .boxed();
+
+    Ok((transport, bandwidth_logger))
 }
