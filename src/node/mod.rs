@@ -65,7 +65,7 @@ pub async fn run() -> Result<()> {
         }
     }
     info!("Done.");
-
+    info!("Known peers: {:?}", swarm.known_peers());
     Ok(())
 }
 

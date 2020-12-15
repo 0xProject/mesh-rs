@@ -3,11 +3,17 @@ use libp2p::{
     gossipsub::{Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity, Topic},
     identify::{Identify, IdentifyEvent},
     identity::Keypair,
-    kad::{record::store::MemoryStore, Kademlia, KademliaConfig, KademliaEvent},
+    kad::{
+        record::{
+            store::{MemoryStore, RecordStore},
+            Record,
+        },
+        Kademlia, KademliaBucketInserts, KademliaConfig, KademliaEvent,
+    },
     mdns::{Mdns, MdnsEvent},
     ping::{Ping, PingConfig, PingEvent},
     swarm::NetworkBehaviourEventProcess,
-    NetworkBehaviour, PeerId,
+    Multiaddr, NetworkBehaviour, PeerId,
 };
 use log::{debug, info};
 use std::time::Duration;
@@ -104,6 +110,7 @@ impl MyBehaviour {
         // Kademlia for 0x Mesh peer discovery
         let mut kad_config = KademliaConfig::default();
         kad_config.set_protocol_name(DHT_PROTOCOL_ID);
+        kad_config.set_kbucket_inserts(KademliaBucketInserts::OnConnected);
         kad_config.set_query_timeout(Duration::from_secs(5));
         debug!("Kademlia config: {:?}", &kad_config);
         let kad_store = MemoryStore::new(peer_id.clone());
@@ -152,5 +159,17 @@ impl MyBehaviour {
         // It's not the query that matters, it's the friends we make along the way.
         let query_id = self.kademlia.get_closest_peers(query.clone());
         debug!("Query {:?} {:?}", query_id, query);
+    }
+
+    pub(crate) fn known_peers(&mut self) -> Vec<(PeerId, Vec<Multiaddr>)> {
+        let mut result = Vec::default();
+        for bucket in self.kademlia.kbuckets() {
+            for entry in bucket.iter() {
+                let peer_id = entry.node.key.preimage();
+                let addresses = entry.node.value.iter().cloned().collect::<Vec<_>>();
+                result.push((peer_id.clone(), addresses));
+            }
+        }
+        result
     }
 }
