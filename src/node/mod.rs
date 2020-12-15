@@ -1,0 +1,98 @@
+mod behaviour;
+mod transport;
+
+use self::{behaviour::MyBehaviour, transport::make_transport};
+use anyhow::{Context, Result};
+use futures::prelude::*;
+use libp2p::{identity, swarm::SwarmBuilder, Multiaddr, PeerId, Swarm};
+use log::{debug, info};
+use tokio::io::{self, AsyncBufReadExt};
+
+pub async fn run() -> Result<()> {
+    // Generate peer id
+    let peer_id_keys = identity::Keypair::generate_ed25519();
+    let peer_id = PeerId::from(peer_id_keys.public());
+    info!("Peer Id: {}", peer_id.clone());
+
+    // Create a transport
+    let transport = make_transport(peer_id_keys.clone())
+        .await
+        .context("Creating libp2p transport")?;
+
+    // Create node behaviour
+    let behaviour = MyBehaviour::new(peer_id_keys)
+        .await
+        .context("Creating node behaviour")?;
+
+    // Executor for connection background tasks.
+    let executor = Box::new(|future| {
+        debug!("Spawning background task");
+        tokio::spawn(future);
+    });
+
+    // Create a Swarm to manage peers and events.
+    let mut swarm: Swarm<MyBehaviour> = SwarmBuilder::new(transport, behaviour, peer_id)
+        .executor(executor)
+        .build();
+
+    // Listen on all interfaces and whatever port the OS assigns
+    Swarm::listen_on(
+        &mut swarm,
+        "/ip4/0.0.0.0/tcp/0"
+            .parse()
+            .context("Parsing listening address")?,
+    )
+    .context("Starting to listen")?;
+
+    // 16Uiu2HAkykwoBxwyvoEbaEkuKMeKrmJDPZ2uKFPUKtqd2JbGHUNH
+    // Protocols: /0x-mesh-dht/version/1  /ipfs/id/1.0.0
+    let bootnode: Multiaddr = "/dns4/bootstrap-2.mesh.0x.org/tcp/60558"
+        .parse()
+        .context("Parsing bootnode address")?;
+
+    Swarm::dial_addr(&mut swarm, bootnode).context("Dialing bootnode")?;
+
+    // Catch SIGTERM so the container can shutdown without an init process.
+    let sigterm = tokio::signal::ctrl_c();
+    tokio::pin!(sigterm);
+
+    // Kick it off
+    loop {
+        tokio::select! {
+            event = swarm.next() => {
+                info!("New Event: {:?}", event);
+            },
+            _ = &mut sigterm => {
+                info!("SIGTERM received, shutting down");
+                // TODO: Shut down swarm?
+                break;
+            }
+        }
+    }
+    info!("Done.");
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use float_eq::assert_float_eq;
+    use futures::stream::{self, StreamExt, TryStreamExt};
+    use hyper::{
+        body::{to_bytes, HttpBody},
+        Request,
+    };
+    use pretty_assertions::assert_eq;
+    use proptest::prelude::*;
+}
+
+#[cfg(feature = "bench")]
+pub(crate) mod bench {
+    use super::*;
+    use criterion::{black_box, Criterion};
+    use futures::executor::block_on;
+    use hyper::body::to_bytes;
+
+    pub(crate) fn group(c: &mut Criterion) {}
+}

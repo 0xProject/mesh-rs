@@ -1,5 +1,5 @@
 [package]
-name = "rust-app-template"
+name = "mesh"
 version = "0.1.0"
 authors = ["Remco Bloemen <remco@wicked.ventures>"]
 edition = "2018"

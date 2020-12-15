@@ -1839,6 +1839,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "mesh"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "criterion",
+ "env_logger",
+ "float_eq",
+ "futures",
+ "libp2p",
+ "libp2p-secio",
+ "log",
+ "pretty_assertions",
+ "proptest",
+ "structopt",
+ "tokio 0.3.5",
+ "tokio-compat-02",
+]
+
+[[package]]
 name = "minicbor"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2504,26 +2524,6 @@ dependencies = [
  "untrusted",
  "web-sys",
  "winapi",
-]
-
-[[package]]
-name = "rust-app-template"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "criterion",
- "env_logger",
- "float_eq",
- "futures",
- "libp2p",
- "libp2p-secio",
- "log",
- "pretty_assertions",
- "proptest",
- "structopt",
- "tokio 0.3.5",
- "tokio-compat-02",
 ]
 
 [[package]]

@@ -28,7 +28,7 @@ async fn async_main(_options: Options) -> Result<()> {
     node::run().await
 }
 
-fn main() -> Result<()> {
+pub fn main() -> Result<()> {
     // Parse CLI and handle help and version.
     #[rustfmt::skip]
     let version = format!("\
