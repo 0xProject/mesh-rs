@@ -15,6 +15,7 @@ use libp2p::{
 };
 use libp2p_secio as secio;
 use std::time::Duration;
+use upgrade::{MapInboundUpgrade, MapOutboundUpgrade};
 
 pub(crate) type Libp2pTransport = libp2p::core::transport::Boxed<(PeerId, StreamMuxerBox)>;
 
@@ -22,6 +23,8 @@ pub(crate) type Libp2pTransport = libp2p::core::transport::Boxed<(PeerId, Stream
 /// encryption and either yamux or else mplex multiplexing.
 pub(crate) async fn make_transport(peer_id_keys: identity::Keypair) -> Result<Libp2pTransport> {
     // Create transport with TCP, DNS and WS
+    // TODO: WASM support
+    // TODO: Circuit-relay (waiting for upstream PR)
     let transport = {
         // TCP/IP transport using Tokio
         let tcp_transport = TokioTcpConfig::new().nodelay(true);
@@ -33,13 +36,12 @@ pub(crate) async fn make_transport(peer_id_keys: identity::Keypair) -> Result<Li
         // Websocket transport over TCP/IP
         let ws_transport = WsConfig::new(tcp_dns_transport.clone());
 
-        // TODO: wasm_ext transport in the WASM context?
         // Combine transports
         tcp_dns_transport.or_transport(ws_transport)
     };
 
     // Create authenticator with Noise and Secio
-    let transport = {
+    let authenticator = {
         // Noise legacy
         let mut noise_legacy = noise::LegacyConfig::default();
         noise_legacy.send_legacy_handshake = false;
@@ -54,37 +56,29 @@ pub(crate) async fn make_transport(peer_id_keys: identity::Keypair) -> Result<Li
         let noise = noise_xx_config.into_authenticated();
 
         // Secio
+        // The Go version of 0x-mesh only supports Secio.
         let secio = secio::SecioConfig::new(peer_id_keys.clone());
 
-        // We need to make the outputs of Noise and Secio match for SelectUpgrade
-        // to work here. See for example Parity Substrate:
-        // https://github.com/paritytech/substrate/blob/7b22fbfc6ba567af8ac0a693ef6593e179f46a53/client/network/src/transport.rs#L97
-        // TODO: Make it work using upgrade builder
+        // We need to do some monad stack shuffling:
+        // `Either<(A, B), (A, C)>` to `(A, Either<B, C>)`
         let upgrade = SelectUpgrade::new(noise, secio);
-        transport.and_then(move |stream, endpoint| {
-            upgrade::apply(stream, upgrade, endpoint, upgrade::Version::V1).map(|out| {
-                match out? {
-                    // We negotiated noise
-                    EitherOutput::First((remote_id, out)) => {
-                        if false {
-                            // TODO: This is just here to give the Err a type.
-                            return Err(upgrade::UpgradeError::Apply(EitherError::A(
-                                noise::NoiseError::InvalidKey,
-                            )));
-                        };
-                        Ok((EitherOutput::First(out), remote_id))
-                    }
-                    // We negotiated secio
-                    EitherOutput::Second((remote_id, out)) => {
-                        Ok((EitherOutput::Second(out), remote_id))
-                    }
-                }
-            })
-        })
+        let upgrade = MapInboundUpgrade::new(upgrade, |out| {
+            match out {
+                EitherOutput::First((peer_id, out)) => (peer_id, EitherOutput::First(out)),
+                EitherOutput::Second((peer_id, out)) => (peer_id, EitherOutput::Second(out)),
+            }
+        });
+        let upgrade = MapOutboundUpgrade::new(upgrade, |out| {
+            match out {
+                EitherOutput::First((peer_id, out)) => (peer_id, EitherOutput::First(out)),
+                EitherOutput::Second((peer_id, out)) => (peer_id, EitherOutput::Second(out)),
+            }
+        });
+        upgrade
     };
 
     // Create multiplexer with yamux and mplex
-    let transport = {
+    let multiplexer = {
         let mut yamux_config = yamux::YamuxConfig::default();
         // Update windows when data is consumed.
         yamux_config.set_window_update_mode(yamux::WindowUpdateMode::on_read());
@@ -92,17 +86,15 @@ pub(crate) async fn make_transport(peer_id_keys: identity::Keypair) -> Result<Li
         let mut mplex_config = mplex::MplexConfig::default();
         mplex_config.set_max_buffer_behaviour(mplex::MaxBufferBehaviour::Block);
 
-        transport.and_then(move |(stream, peer_id), endpoint| {
-            let peer_id2 = peer_id.clone();
-            let upgrade = SelectUpgrade::new(yamux_config, mplex_config)
-                .map_inbound(move |muxer| (peer_id, muxer))
-                .map_outbound(move |muxer| (peer_id2, muxer));
-            upgrade::apply(stream, upgrade, endpoint, upgrade::Version::V1)
-                .map_ok(|(id, muxer)| (id, StreamMuxerBox::new(muxer)))
-        })
+        SelectUpgrade::new(yamux_config, mplex_config)
     };
 
     // TODO: Log the connection paths used
 
-    Ok(transport.boxed())
+    Ok(transport
+        .upgrade(upgrade::Version::V1)
+        .authenticate(authenticator)
+        .multiplex(multiplexer)
+        .timeout(Duration::from_secs(20))
+        .boxed())
 }
