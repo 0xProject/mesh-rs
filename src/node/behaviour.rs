@@ -85,7 +85,7 @@ impl NetworkBehaviourEventProcess<IdentifyEvent> for MyBehaviour {
                 trace!("Identifying information sent to {}", peer_id);
             }
             Error { peer_id, error } => {
-                error!("Indentify error on peer {}: {}", peer_id, error);
+                error!("Identify error on peer {}: {}", peer_id, error);
             }
         }
     }
@@ -103,7 +103,7 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for MyBehaviour {
     fn inject_event(&mut self, event: GossipsubEvent) {
         match event {
             GossipsubEvent::Message(peer_id, id, message) => {
-                info!(
+                trace!(
                     "Got message: {} with id: {} from peer: {:?}",
                     String::from_utf8_lossy(&message.data),
                     id,
@@ -159,7 +159,6 @@ impl MyBehaviour {
         let ping = Ping::new(PingConfig::new());
 
         // GossipSub
-        let topic = Topic::new(TOPIC.into());
         let gossipsub_config = GossipsubConfigBuilder::new()
             .max_transmit_size(262144)
             .build();
@@ -167,11 +166,14 @@ impl MyBehaviour {
             MessageAuthenticity::Signed(peer_key.clone()),
             gossipsub_config,
         );
+
+        // Subscribe to orders
+        let topic = Topic::new(TOPIC.into());
         pubsub.subscribe(topic);
 
         // OrderSync protocol versions
         let order_sync_config = order_sync::Config::default();
-        let order_sync = order_sync::new(order_sync::Version::V0, order_sync_config);
+        let order_sync = order_sync::new(order_sync_config);
 
         let mut behaviour = MyBehaviour {
             mdns,
@@ -186,6 +188,8 @@ impl MyBehaviour {
 
     fn upsert_peer_info(&mut self, peer_info: IdentifyInfo) {
         info!("Learned about peer {:?}", peer_info);
+        let peer_id = peer_info.public_key.into_peer_id();
+        self.get_orders(peer_id).unwrap();
         // TODO: Store
     }
 
@@ -212,14 +216,14 @@ impl MyBehaviour {
     /// and attempts to perform the ordersync protocol. It keeps trying until
     /// ordersync has been completed with minPeers, using an exponential backoff
     /// strategy between retries.
-    pub(crate) async fn get_orders(&mut self) -> Result<()> {
-        let peers = self.known_peers();
-        for peer in &peers {}
+    pub(crate) fn get_orders(&mut self, peer: PeerId) -> Result<()> {
+        let request = order_sync::Request::default();
+        let id = self.order_sync.send_request(&peer, request);
+        info!("Req({})", id);
         Ok(())
     }
 
     pub(crate) async fn get_identity(&mut self) -> Result<()> {
-        let handler = self.new_handler().inbound_protocol();
         Ok(())
     }
 }

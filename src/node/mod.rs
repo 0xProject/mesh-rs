@@ -43,7 +43,7 @@ pub async fn run() -> Result<()> {
     .context("Starting to listen")?;
 
     // Do something interesting
-    // swarm.search_random_peer();
+    swarm.search_random_peer();
 
     // Catch SIGTERM so the container can shutdown without an init process.
     let sigterm = tokio::signal::ctrl_c();
@@ -76,11 +76,6 @@ pub async fn run() -> Result<()> {
 mod test {
     use super::*;
     use float_eq::assert_float_eq;
-    use futures::stream::{self, StreamExt, TryStreamExt};
-    use hyper::{
-        body::{to_bytes, HttpBody},
-        Request,
-    };
     use pretty_assertions::assert_eq;
     use proptest::prelude::*;
 }

@@ -1,4 +1,17 @@
 //! TODO: Add Throttling: https://docs.rs/libp2p/0.32.2/libp2p/request_response/struct.Throttled.html
+//!
+//! TODO:
+//!
+//! This protocol implements set reconciliation, but does so in a rather
+//! inefficient way (bulk transfer of all the orders). There more efficient
+//! reconciliation algorithms out there that efficiently compute the set
+//! difference first. For an academic overview see
+//!
+//! * Ivo Kubjas (2014). "Set Reconciliation Master Thesis". [pdf](https://comserv.cs.ut.ee/home/files/kubjas_cybersecurity_2014.pdf?study=ATILoputoo&reference=E731444824814AE27FE0D91FA073B5F3FE61038D)
+//!
+//! There is a crate for Minisketch that should allow prototyping something:
+//!
+//! <https://docs.rs/minisketch-rs/0.1.9/minisketch_rs/>
 
 use crate::prelude::*;
 use async_trait::async_trait;
@@ -12,59 +25,116 @@ use libp2p::{
         RequestResponseEvent,
     },
 };
-use std::{io, iter};
+use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, io, iter};
 
 /// Maximum message size
 const MAX_SIZE: usize = 1024;
+
+#[derive(Clone, Debug)]
+pub struct Version();
+
+#[derive(Clone, Debug)]
+pub struct Codec();
 
 pub type Config = RequestResponseConfig;
 pub type Protocol = RequestResponse<Codec>;
 pub type Event = RequestResponseEvent<Request, Response>;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Version {
-    V0,
+/// The OrderSync protocol uses the same internally tagged JSON object
+/// for request and response.
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
+enum Message {
+    Request(Request),
+    Response(Response),
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub enum Request {
-    None,
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct Request {
+    subprotocols: Vec<String>,
+    metadata:     Option<RequestMetadata>,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub enum Response {
-    None,
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub enum RequestMetadata {
+    V0 {
+        #[serde(rename = "snapshotID")]
+        snapshot_id: String,
+
+        page: i64,
+
+        #[serde(rename = "orderfilter")]
+        order_filter: Option<OrderFilter>,
+    },
+    V1 {
+        #[serde(rename = "minOrderHash")]
+        min_order_hash: Hash,
+
+        #[serde(rename = "orderfilter")]
+        order_filter: OrderFilter,
+    },
 }
 
-#[derive(Clone)]
-pub struct Codec();
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct Response {
+    orders: Vec<Order>,
 
-pub fn new(version: Version, config: Config) -> Protocol {
-    let protocols = iter::once((version, ProtocolSupport::Full));
+    complete: bool,
+
+    // TODO: Is this field really optional?
+    #[serde(flatten)]
+    metadata: Option<ResponseMetadata>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(tag = "subprotocol", content = "metadata")]
+pub enum ResponseMetadata {
+    #[serde(rename = "/pagination-with-filter/version/0")]
+    V0 {
+        #[serde(rename = "snapshotID")]
+        snapshot_id: String,
+
+        page: i64,
+    },
+    #[serde(rename = "/pagination-with-filter/version/1")]
+    V1 {
+        #[serde(rename = "nextMinOrderHash")]
+        next_min_order_hash: Hash,
+    },
+}
+
+#[derive(Clone, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
+pub struct Order(HashMap<String, String>);
+
+#[derive(Clone, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
+pub struct OrderFilter(HashMap<String, String>);
+
+// TODO: This may not be correct
+#[derive(Clone, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
+pub struct Hash(HashMap<String, String>);
+
+pub fn new(config: Config) -> Protocol {
+    let protocols = iter::once((Version(), ProtocolSupport::Full));
     RequestResponse::new(Codec(), protocols, config)
 }
 
 impl ProtocolName for Version {
     fn protocol_name(&self) -> &[u8] {
-        match *self {
-            Version::V0 => b"/0x-mesh/order-sync/version/0",
-        }
+        b"/0x-mesh/order-sync/version/0"
     }
 }
 
-async fn read_msg<T>(socket: &mut T) -> io::Result<Vec<u8>>
-where
-    T: Unpin + AsyncRead,
-{
-    read_one(socket, MAX_SIZE)
-        .map(|res| {
-            match res {
-                Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
-                Ok(vec) if vec.is_empty() => Err(io::ErrorKind::UnexpectedEof.into()),
-                Ok(vec) => Ok(vec),
-            }
-        })
-        .await
+impl Default for Request {
+    fn default() -> Self {
+        Request {
+            subprotocols: vec![
+                "/pagination-with-filter/version/0".into(),
+                "/pagination-with-filter/version/1".into(),
+            ],
+            metadata:     None,
+        }
+    }
 }
 
 #[async_trait]
@@ -81,9 +151,19 @@ impl RequestResponseCodec for Codec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let msg = read_msg(io).await?;
-        info!("Req: {:?}", msg);
-        Ok(Request::None)
+        // OPT: Streaming read
+        let mut buffer = Vec::new();
+        io.read_to_end(&mut buffer).await?;
+        let message = serde_json::de::from_slice::<Message>(&buffer)?;
+        match message {
+            Message::Request(obj) => Ok(obj),
+            _ => {
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Expected Request object",
+                ))
+            }
+        }
     }
 
     async fn read_response<T>(
@@ -94,9 +174,19 @@ impl RequestResponseCodec for Codec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let msg = read_msg(io).await?;
-        info!("Req: {:?}", msg);
-        Ok(Response::None)
+        // OPT: Streaming read
+        let mut buffer = Vec::new();
+        io.read_to_end(&mut buffer).await?;
+        let message = serde_json::de::from_slice::<Message>(&buffer)?;
+        match message {
+            Message::Response(obj) => Ok(obj),
+            _ => {
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Expected Response object",
+                ))
+            }
+        }
     }
 
     async fn write_request<T>(
@@ -108,7 +198,9 @@ impl RequestResponseCodec for Codec {
     where
         T: AsyncWrite + Unpin + Send,
     {
-        write_one(io, b"Test").await
+        // OPT: Streaming write
+        io.write_all(serde_json::to_vec(&Message::Request(req))?.as_slice())
+            .await
     }
 
     async fn write_response<T>(
@@ -120,6 +212,56 @@ impl RequestResponseCodec for Codec {
     where
         T: AsyncWrite + Unpin + Send,
     {
-        write_one(io, b"Test").await
+        // OPT: Streaming write
+        io.write_all(serde_json::to_vec(&Message::Response(res))?.as_slice())
+            .await
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use pretty_assertions::assert_eq;
+    use serde_json::json;
+
+    #[test]
+    fn test_request_json() {
+        let message = Message::Request(Request::default());
+        assert_eq!(
+            serde_json::to_value(&message).unwrap(),
+            json!({
+                "type": "Request",
+                "subprotocols": [
+                    "/pagination-with-filter/version/0",
+                    "/pagination-with-filter/version/1",
+                ],
+                "metadata": null
+            })
+        );
+    }
+
+    #[test]
+    fn test_response_json() {
+        let message = Message::Response(Response {
+            complete: false,
+            metadata: Some(ResponseMetadata::V0 {
+                page:        0,
+                snapshot_id: "0x172b4c50e71cb73ed3ac8d191a6ddaf683d70757c848b62f6b33b3845bcbecbd"
+                    .into(),
+            }),
+            orders:   vec![],
+        });
+        assert_eq!(
+            serde_json::to_value(&message).unwrap(),
+            json!({
+                "type": "Response",
+                "subprotocol":"/pagination-with-filter/version/0",
+                "orders":[],
+                "complete":false,
+                "metadata": {
+                    "page":0,"snapshotID":"0x172b4c50e71cb73ed3ac8d191a6ddaf683d70757c848b62f6b33b3845bcbecbd"
+                },
+            })
+        );
     }
 }

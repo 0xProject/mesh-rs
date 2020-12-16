@@ -29,3 +29,7 @@ Should connect to the 0xMesh main network and start logging order (among many ot
 https://github.com/libp2p/rust-libp2p
 
 https://docs.rs/libp2p/0.32.2/libp2p/
+
+
+
+RUST_LOG="info,libp2p_core=debug,mesh=debug"

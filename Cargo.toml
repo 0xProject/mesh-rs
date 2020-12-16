@@ -33,6 +33,10 @@ tokio-compat-02 = "0.1"
 structopt = "0.3"
 criterion = { version = "0.3", optional = true }
 async-trait = "0.1.42"
+hex = "0.4"
+serde = { version = "1.0", features = [ "derive" ] }
+serde_json = "1.0"
+tokio-serde-json = "0.3"
 
 [dev-dependencies]
 proptest = "0.10"
