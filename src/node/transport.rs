@@ -1,18 +1,19 @@
-use anyhow::{Context, Result};
-use futures::prelude::*;
+//! Compose the transport stack for LibP2P
+//!
+//! TODO: Testnet memory transport
+//! TODO: pnet private network for testing
+
+use crate::prelude::*;
 use libp2p::{
     bandwidth::BandwidthSinks,
     core::{
-        either::{EitherError, EitherOutput},
-        muxing::StreamMuxerBox,
-        upgrade,
-        upgrade::SelectUpgrade,
+        either::EitherOutput, muxing::StreamMuxerBox, upgrade, upgrade::SelectUpgrade, UpgradeInfo,
     },
     dns::DnsConfig,
     identity, mplex, noise,
     tcp::TokioTcpConfig,
     websocket::WsConfig,
-    yamux, InboundUpgradeExt, OutboundUpgradeExt, PeerId, Transport, TransportExt,
+    yamux, PeerId, Transport, TransportExt,
 };
 use libp2p_secio as secio;
 use std::{sync::Arc, time::Duration};
@@ -83,6 +84,7 @@ pub(crate) async fn make_transport(
         });
         upgrade
     };
+    info!("Authenticator: {:?}", authenticator.protocol_info());
 
     // Create multiplexer with yamux and mplex
     let multiplexer = {
@@ -95,6 +97,7 @@ pub(crate) async fn make_transport(
 
         SelectUpgrade::new(yamux_config, mplex_config)
     };
+    info!("Mutiplexer: {:?}", multiplexer.protocol_info());
 
     // TODO: Log the connection paths used
 

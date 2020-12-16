@@ -1,12 +1,10 @@
 mod behaviour;
+mod order_sync;
 mod transport;
 
 use self::{behaviour::MyBehaviour, transport::make_transport};
-use anyhow::{Context, Result};
-use futures::prelude::*;
-use libp2p::{identity, swarm::SwarmBuilder, Multiaddr, PeerId, Swarm};
-use log::{debug, info};
-use tokio::io::{self, AsyncBufReadExt};
+use crate::prelude::*;
+use libp2p::{identity, swarm::SwarmBuilder, PeerId, Swarm};
 
 pub async fn run() -> Result<()> {
     // Generate peer id

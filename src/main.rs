@@ -2,9 +2,15 @@
 
 mod node;
 
-use anyhow::{Context, Result};
+mod prelude {
+    pub use anyhow::{Context, Result};
+    pub use futures::prelude::*;
+    pub use log::{debug, error, info, trace, warn};
+    pub use tokio::prelude::*;
+}
+
 use env_logger;
-use log::info;
+use prelude::*;
 use structopt::StructOpt;
 use tokio;
 

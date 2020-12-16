@@ -1843,6 +1843,7 @@ name = "mesh"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "criterion",
  "env_logger",

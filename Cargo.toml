@@ -32,6 +32,7 @@ tokio = { version = "0.3", features = ["macros", "rt-multi-thread", "signal", "i
 tokio-compat-02 = "0.1"
 structopt = "0.3"
 criterion = { version = "0.3", optional = true }
+async-trait = "0.1.42"
 
 [dev-dependencies]
 proptest = "0.10"

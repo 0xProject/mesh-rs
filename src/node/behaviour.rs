@@ -1,21 +1,35 @@
-use anyhow::{Context, Result};
+//! Stack of implemented protocols for the node.
+//!
+//! Implemented protocols:
+//!
+//! * `/ipfs/id/1.0.0`
+//! * `/meshsub/1.0.0` (aka gossipsub)
+//! * `/0x-mesh-dht/version/1` (aka kademlia)
+//! * `/0x-mesh/order-sync/version/0`
+//!
+//! Missing protocols:
+//!
+//! * `/ipfs/id/push/1.0.0`
+//! * `/p2p/id/delta/1.0.0`
+//! * `/libp2p/circuit/relay/0.1.0
+//! * `/floodsub/1.0.0`
+//!
+//! TODO: https://docs.rs/libp2p-observed-address/0.12.0/libp2p_observed_address/
+
+use super::order_sync;
+use crate::prelude::*;
 use libp2p::{
     gossipsub::{Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity, Topic},
-    identify::{Identify, IdentifyEvent},
+    identify::{Identify, IdentifyEvent, IdentifyInfo},
     identity::Keypair,
     kad::{
-        record::{
-            store::{MemoryStore, RecordStore},
-            Record,
-        },
-        Kademlia, KademliaBucketInserts, KademliaConfig, KademliaEvent,
+        record::store::MemoryStore, Kademlia, KademliaBucketInserts, KademliaConfig, KademliaEvent,
     },
     mdns::{Mdns, MdnsEvent},
     ping::{Ping, PingConfig, PingEvent},
-    swarm::NetworkBehaviourEventProcess,
+    swarm::{NetworkBehaviour, NetworkBehaviourEventProcess},
     Multiaddr, NetworkBehaviour, PeerId,
 };
-use log::{debug, info};
 use std::time::Duration;
 
 const DHT_PROTOCOL_ID: &[u8] = b"/0x-mesh-dht/version/1";
@@ -35,21 +49,14 @@ const BOOTNODES: &'static [(&str, &str)] = &[
     ),
 ];
 
-// protocols: ["/ipfs/id/1.0.0", "/ipfs/id/push/1.0.0", "/p2p/id/delta/1.0.0",
-// "/ipfs/ping/1.0.0", "/libp2p/circuit/relay/0.1.0", "/0x-mesh-dht/version/1",
-// "/libp2p/autonat/1.0.0"]
-
-// We create a custom network behaviour that combines floodsub and mDNS.
-// The derive generates a delegating `NetworkBehaviour` impl which in turn
-// requires the implementations of `NetworkBehaviourEventProcess` for
-// the events of each behaviour.
 #[derive(NetworkBehaviour)]
 pub(crate) struct MyBehaviour {
-    mdns:     Mdns,
-    kademlia: Kademlia<MemoryStore>,
-    identify: Identify,
-    ping:     Ping,
-    pubsub:   Gossipsub,
+    mdns:       Mdns,
+    kademlia:   Kademlia<MemoryStore>,
+    identify:   Identify,
+    ping:       Ping,
+    pubsub:     Gossipsub,
+    order_sync: order_sync::Protocol,
 }
 
 impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
@@ -69,19 +76,30 @@ impl NetworkBehaviourEventProcess<KademliaEvent> for MyBehaviour {
 impl NetworkBehaviourEventProcess<IdentifyEvent> for MyBehaviour {
     /// Called when `identify` produces and event.
     fn inject_event(&mut self, event: IdentifyEvent) {
-        debug!("Identify: {:?}", event);
+        use IdentifyEvent::*;
+        match event {
+            Received { info, .. } => {
+                self.upsert_peer_info(info);
+            }
+            Sent { peer_id } => {
+                trace!("Identifying information sent to {}", peer_id);
+            }
+            Error { peer_id, error } => {
+                error!("Indentify error on peer {}: {}", peer_id, error);
+            }
+        }
     }
 }
 
 impl NetworkBehaviourEventProcess<PingEvent> for MyBehaviour {
-    /// Called when `identify` produces and event.
+    /// Called when `ping` produces and event.
     fn inject_event(&mut self, event: PingEvent) {
-        debug!("Ping: {:?}", event);
+        trace!("Ping: {:?}", event);
     }
 }
 
 impl NetworkBehaviourEventProcess<GossipsubEvent> for MyBehaviour {
-    /// Called when `identify` produces and event.
+    /// Called when `gossipsub` produces and event.
     fn inject_event(&mut self, event: GossipsubEvent) {
         match event {
             GossipsubEvent::Message(peer_id, id, message) => {
@@ -94,6 +112,13 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for MyBehaviour {
             }
             event => debug!("Gossipsub: {:?}", event),
         }
+    }
+}
+
+impl NetworkBehaviourEventProcess<order_sync::Event> for MyBehaviour {
+    /// Called when `identify` produces and event.
+    fn inject_event(&mut self, event: order_sync::Event) {
+        debug!("OrderSync: {:?}", event);
     }
 }
 
@@ -130,7 +155,7 @@ impl MyBehaviour {
         // Identify protocol
         let identify = Identify::new("/ipfs/0.1.0".into(), "mesh-rs".into(), public_key);
 
-        // Pin protocol
+        // Ping protocol
         let ping = Ping::new(PingConfig::new());
 
         // GossipSub
@@ -144,14 +169,24 @@ impl MyBehaviour {
         );
         pubsub.subscribe(topic);
 
+        // OrderSync protocol versions
+        let order_sync_config = order_sync::Config::default();
+        let order_sync = order_sync::new(order_sync::Version::V0, order_sync_config);
+
         let mut behaviour = MyBehaviour {
             mdns,
             kademlia,
             identify,
             ping,
             pubsub,
+            order_sync,
         };
         Ok(behaviour)
+    }
+
+    fn upsert_peer_info(&mut self, peer_info: IdentifyInfo) {
+        info!("Learned about peer {:?}", peer_info);
+        // TODO: Store
     }
 
     pub(crate) fn search_random_peer(&mut self) {
@@ -171,5 +206,20 @@ impl MyBehaviour {
             }
         }
         result
+    }
+
+    /// GetOrders iterates through every peer the node is currently connected to
+    /// and attempts to perform the ordersync protocol. It keeps trying until
+    /// ordersync has been completed with minPeers, using an exponential backoff
+    /// strategy between retries.
+    pub(crate) async fn get_orders(&mut self) -> Result<()> {
+        let peers = self.known_peers();
+        for peer in &peers {}
+        Ok(())
+    }
+
+    pub(crate) async fn get_identity(&mut self) -> Result<()> {
+        let handler = self.new_handler().inbound_protocol();
+        Ok(())
     }
 }
