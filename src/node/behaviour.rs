@@ -19,6 +19,7 @@
 use super::order_sync;
 use crate::prelude::*;
 use libp2p::{
+    core::ProtocolName,
     gossipsub::{Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity, Topic},
     identify::{Identify, IdentifyEvent, IdentifyInfo},
     identity::Keypair,
@@ -57,6 +58,9 @@ pub(crate) struct MyBehaviour {
     ping:       Ping,
     pubsub:     Gossipsub,
     order_sync: order_sync::Protocol,
+
+    #[behaviour(ignore)]
+    requesting: bool,
 }
 
 impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
@@ -69,7 +73,15 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
 impl NetworkBehaviourEventProcess<KademliaEvent> for MyBehaviour {
     /// Called when `kademlia` produces and event.
     fn inject_event(&mut self, event: KademliaEvent) {
+        use KademliaEvent::*;
         debug!("Kademlia: {:?}", event);
+        match event {
+            QueryResult { .. } => {
+                // Search another peer
+                self.search_random_peer();
+            }
+            _ => {}
+        }
     }
 }
 
@@ -118,7 +130,7 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for MyBehaviour {
 impl NetworkBehaviourEventProcess<order_sync::Event> for MyBehaviour {
     /// Called when `identify` produces and event.
     fn inject_event(&mut self, event: order_sync::Event) {
-        debug!("OrderSync: {:?}", event);
+        warn!("OrderSync event: {:?}", event);
     }
 }
 
@@ -182,6 +194,7 @@ impl MyBehaviour {
             ping,
             pubsub,
             order_sync,
+            requesting: false,
         };
         Ok(behaviour)
     }
@@ -189,13 +202,24 @@ impl MyBehaviour {
     fn upsert_peer_info(&mut self, peer_info: IdentifyInfo) {
         info!("Learned about peer {:?}", peer_info);
         let peer_id = peer_info.public_key.into_peer_id();
-        self.get_orders(peer_id).unwrap();
+        if peer_info
+            .protocols
+            .contains(&String::from_utf8_lossy(order_sync::Version().protocol_name()).to_string())
+        {
+            // Node supports order sync protocol
+            if !self.requesting {
+                // Request only once, and from the first peer we see.
+                self.requesting = true;
+                // self.get_orders(peer_id).unwrap();
+            }
+        }
         // TODO: Store
     }
 
     pub(crate) fn search_random_peer(&mut self) {
-        let query: PeerId = Keypair::generate_ed25519().public().into();
         // It's not the query that matters, it's the friends we make along the way.
+        let query: PeerId = Keypair::generate_ed25519().public().into();
+        info!("Searching for random peer {:?} query", &query);
         let query_id = self.kademlia.get_closest_peers(query.clone());
         debug!("Query {:?} {:?}", query_id, query);
     }

@@ -24,7 +24,7 @@ pub async fn run() -> Result<()> {
 
     // Executor for connection background tasks.
     let executor = Box::new(|future| {
-        debug!("Spawning background task");
+        trace!("Spawning background task");
         tokio::spawn(future);
     });
 
