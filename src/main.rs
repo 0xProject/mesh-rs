@@ -6,6 +6,7 @@ mod prelude {
     pub use anyhow::{Context, Result};
     pub use futures::prelude::*;
     pub use log::{debug, error, info, trace, warn};
+    pub use smallvec::{smallvec, SmallVec};
     pub use tokio::prelude::*;
 }
 

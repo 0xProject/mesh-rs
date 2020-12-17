@@ -63,12 +63,22 @@ pub async fn run() -> Result<()> {
         }
     }
     info!("Done.");
-    info!("Known peers: {:?}", swarm.known_peers());
+    info!(
+        "Known peers: {:?} with info: {:?}",
+        swarm.known_peers(),
+        swarm.peers
+    );
     info!(
         "Bandwidth: {} inbound, {} outbound",
         bandwidth_monitor.total_inbound(),
         bandwidth_monitor.total_outbound()
     );
+    info!("Fetched {} orders", swarm.orders.len());
+    {
+        let mut file = std::fs::File::create("orders.json")?;
+        serde_json::to_writer_pretty(file, &swarm.orders)?;
+    }
+    info!("Orders saved");
     Ok(())
 }
 

@@ -164,7 +164,7 @@ impl OrderFilter {
         OrderFilter {
             chain_id: 1,
             exchange_address: "0x61935cbdd02287b511119ddb11aeb42f1593b7ef".into(),
-            ..Self::default()
+            ..OrderFilter::default()
         }
     }
 
@@ -173,7 +173,7 @@ impl OrderFilter {
         OrderFilter {
             chain_id: 1,
             exchange_address: "0x080bf510fcbf18b91105470639e9561022937712".into(),
-            ..Self::default()
+            ..OrderFilter::default()
         }
     }
 }
@@ -219,6 +219,51 @@ impl From<OrderFilter> for Request {
                     },
                 ],
             },
+        }
+    }
+}
+
+impl RequestMetadata {
+    pub fn sub_protocol_name(&self) -> &str {
+        match self {
+            Self::V0 { .. } => "/pagination-with-filter/version/0",
+            Self::V1 { .. } => "/pagination-with-filter/version/1",
+        }
+    }
+
+    pub fn order_filter_ref<'a>(&'a self) -> &'a OrderFilter {
+        match self {
+            Self::V0 { order_filter, .. } => order_filter,
+            Self::V1 { order_filter, .. } => order_filter,
+        }
+    }
+
+    pub fn order_filter_mut<'a>(&'a mut self) -> &'a mut OrderFilter {
+        match self {
+            Self::V0 { order_filter, .. } => order_filter,
+            Self::V1 { order_filter, .. } => order_filter,
+        }
+    }
+}
+
+impl From<ResponseMetadata> for RequestMetadata {
+    fn from(response: ResponseMetadata) -> Self {
+        match response {
+            ResponseMetadata::V0 { page, snapshot_id } => {
+                RequestMetadata::V0 {
+                    page: page + 1,
+                    snapshot_id,
+                    order_filter: OrderFilter::default(),
+                }
+            }
+            ResponseMetadata::V1 {
+                next_min_order_hash,
+            } => {
+                RequestMetadata::V1 {
+                    min_order_hash: next_min_order_hash,
+                    order_filter:   OrderFilter::default(),
+                }
+            }
         }
     }
 }

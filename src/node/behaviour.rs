@@ -32,7 +32,7 @@ use libp2p::{
     swarm::{NetworkBehaviour, NetworkBehaviourEventProcess},
     Multiaddr, NetworkBehaviour, PeerId,
 };
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 const DHT_PROTOCOL_ID: &[u8] = b"/0x-mesh-dht/version/1";
 const TOPIC: &str = "/0x-orders/version/3/chain/1/schema/e30=";
@@ -62,6 +62,12 @@ pub(crate) struct MyBehaviour {
 
     #[behaviour(ignore)]
     requesting: bool,
+
+    #[behaviour(ignore)]
+    pub peers: HashMap<PeerId, IdentifyInfo>,
+
+    #[behaviour(ignore)]
+    pub orders: Vec<order_sync::Order>,
 }
 
 impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
@@ -136,13 +142,32 @@ impl NetworkBehaviourEventProcess<order_sync::Event> for MyBehaviour {
         use RequestResponseMessage::*;
         match event {
             Message {peer, message: Request {request_id, request, channel}} => {
+                trace!("Peer {:?} req {:?}: {:?}", &peer, &request_id, &request);
                 let response = order_sync::Response::default();
                 self.order_sync.send_response(channel, response).map_err(|err| {
                     error!("Error sending response {:?}", err);
                 });
             }
             Message {peer, message: Response {request_id, response}} => {
-                
+                debug!("Received {} orders from {}", response.orders.len(), &peer);
+                for order in response.orders.into_iter() {
+                    self.receive_order(&peer, order);
+                }
+                if response.complete {
+                    info!("Completed sync with peer {}", peer);
+                } else {
+                    debug!("Continuing fetch from peer {}", peer);
+                    let mut metadata = order_sync::RequestMetadata::from(response.metadata.clone());
+                    *metadata.order_filter_mut() = order_sync::OrderFilter::mainnet_v3();
+                    let request = order_sync::Request {
+                        subprotocols: smallvec![metadata.sub_protocol_name().into()],
+                        metadata: order_sync::RequestMetadataContainer {
+                            metadata: smallvec![metadata]
+                        }
+                    };
+                    error!("Response {:#?}, Request {:#?}", &response.metadata, &request);
+                    self.order_sync.send_request(&peer, request);
+                }
             }
             event => warn!("OrderSync event: {:?}", event),
         }
@@ -210,13 +235,16 @@ impl MyBehaviour {
             pubsub,
             order_sync,
             requesting: false,
+            orders: Vec::new(),
+            peers: HashMap::new(),
         };
         Ok(behaviour)
     }
 
     fn upsert_peer_info(&mut self, peer_info: IdentifyInfo) {
-        info!("Learned about peer {:?}", peer_info);
-        let peer_id = peer_info.public_key.into_peer_id();
+        debug!("Learned about peer {:?}", peer_info);
+        let peer_id = peer_info.public_key.clone().into_peer_id();
+
         if peer_info
             .protocols
             .contains(&String::from_utf8_lossy(order_sync::Version().protocol_name()).to_string())
@@ -225,10 +253,11 @@ impl MyBehaviour {
             if !self.requesting {
                 // Request only once, and from the first peer we see.
                 self.requesting = true;
-                self.get_orders(peer_id).unwrap();
+                self.get_orders(peer_id.clone()).unwrap();
             }
         }
-        // TODO: Store
+
+        self.peers.insert(peer_id, peer_info);
     }
 
     pub(crate) fn search_random_peer(&mut self) {
@@ -264,5 +293,10 @@ impl MyBehaviour {
 
     pub(crate) async fn get_identity(&mut self) -> Result<()> {
         Ok(())
+    }
+
+    fn receive_order(&mut self, peer_id: &PeerId, order: order_sync::Order) {
+        trace!("Received {:?} from {}", order, peer_id);
+        self.orders.push(order);
     }
 }
