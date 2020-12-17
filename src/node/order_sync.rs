@@ -139,6 +139,14 @@ impl Default for OrderFilter {
 }
 
 impl OrderFilter {
+    pub fn mainnet_v3() -> Self {
+        OrderFilter {
+            chain_id: 1,
+            exchange_address: "0x61935cbdd02287b511119ddb11aeb42f1593b7ef".into(),
+            ..Self::default()
+        }
+    }
+
     pub fn mainnet_v2() -> Self {
         OrderFilter {
             chain_id: 1,
@@ -463,5 +471,11 @@ mod test {
                 },
             })
         );
+    }
+
+    #[test]
+    fn test_parse_response() {
+        let response = include_str!("../../test/response.json");
+        let message = serde_json::from_str::<Message>(response).unwrap();
     }
 }
