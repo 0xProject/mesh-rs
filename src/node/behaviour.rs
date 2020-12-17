@@ -210,7 +210,7 @@ impl MyBehaviour {
             if !self.requesting {
                 // Request only once, and from the first peer we see.
                 self.requesting = true;
-                // self.get_orders(peer_id).unwrap();
+                self.get_orders(peer_id).unwrap();
             }
         }
         // TODO: Store
@@ -241,7 +241,7 @@ impl MyBehaviour {
     /// ordersync has been completed with minPeers, using an exponential backoff
     /// strategy between retries.
     pub(crate) fn get_orders(&mut self, peer: PeerId) -> Result<()> {
-        let request = order_sync::Request::default();
+        let request = order_sync::Request::from(order_sync::OrderFilter::mainnet_v2());
         let id = self.order_sync.send_request(&peer, request);
         info!("Req({})", id);
         Ok(())

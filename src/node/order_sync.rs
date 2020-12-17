@@ -117,7 +117,7 @@ pub enum ResponseMetadata {
 pub struct Order(HashMap<String, String>);
 
 /// See <https://github.com/0xProject/0x-mesh/blob/b2a12fdb186fb56eb7d99dc449b9773d0943ee8e/orderfilter/shared.go#L144>
-#[derive(Clone, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OrderFilter {
     custom_order_schema: String,
@@ -128,19 +128,34 @@ pub struct OrderFilter {
     exchange_address: String,
 }
 
-pub fn new(config: Config) -> Protocol {
-    let protocols = iter::once((Version(), ProtocolSupport::Full));
-    RequestResponse::new(Codec(), protocols, config)
+impl Default for OrderFilter {
+    fn default() -> Self {
+        OrderFilter {
+            chain_id:            i64::default(),
+            custom_order_schema: "{}".into(),
+            exchange_address:    "0x0000000000000000000000000000000000000000".into(),
+        }
+    }
 }
 
-impl ProtocolName for Version {
-    fn protocol_name(&self) -> &[u8] {
-        b"/0x-mesh/order-sync/version/0"
+impl OrderFilter {
+    pub fn mainnet_v2() -> Self {
+        OrderFilter {
+            chain_id: 1,
+            exchange_address: "0x080bf510fcbf18b91105470639e9561022937712".into(),
+            ..Self::default()
+        }
     }
 }
 
 impl Default for Request {
     fn default() -> Self {
+        Request::from(OrderFilter::default())
+    }
+}
+
+impl From<OrderFilter> for Request {
+    fn from(order_filter: OrderFilter) -> Self {
         Request {
             subprotocols: vec![
                 "/pagination-with-filter/version/1".into(),
@@ -152,16 +167,27 @@ impl Default for Request {
                         min_order_hash:
                             "0x0000000000000000000000000000000000000000000000000000000000000000"
                                 .into(),
-                        order_filter:   OrderFilter::default(),
+                        order_filter:   order_filter.clone(),
                     },
                     RequestMetadata::V0 {
-                        snapshot_id:  String::default(),
-                        page:         0,
-                        order_filter: OrderFilter::default(),
+                        snapshot_id: String::default(),
+                        page: 0,
+                        order_filter,
                     },
                 ],
             },
         }
+    }
+}
+
+pub fn new(config: Config) -> Protocol {
+    let protocols = iter::once((Version(), ProtocolSupport::Full));
+    RequestResponse::new(Codec(), protocols, config)
+}
+
+impl ProtocolName for Version {
+    fn protocol_name(&self) -> &[u8] {
+        b"/0x-mesh/order-sync/version/0"
     }
 }
 
@@ -319,8 +345,8 @@ mod test {
                             "minOrderHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
                             "orderfilter": {
                                 "chainID": 0,
-                                "customOrderSchema": "",
-                                "exchangeAddress": "",
+                                "customOrderSchema": "{}",
+                                "exchangeAddress": "0x0000000000000000000000000000000000000000",
                             },
                         },
                         {
@@ -328,8 +354,8 @@ mod test {
                             "snapshotID": "",
                             "orderfilter": {
                                 "chainID": 0,
-                                "customOrderSchema": "",
-                                "exchangeAddress": "",
+                                "customOrderSchema": "{}",
+                                "exchangeAddress": "0x0000000000000000000000000000000000000000",
                             },
                         }
                     ],
