@@ -118,8 +118,7 @@ pub enum ResponseMetadata {
 #[derive(Clone, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Order {
-    #[serde(rename = "chainId")]
-    chain_id:                i64,
+    chain_id:                i64, // Note: Unlike elsewhere, not renamed to chainID
     exchange_address:        String,
     maker_address:           String,
     maker_asset_data:        String,
