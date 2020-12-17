@@ -1,55 +1,14 @@
-//! TODO: Add Throttling: https://docs.rs/libp2p/0.32.2/libp2p/request_response/struct.Throttled.html
+//! ## To do
 //!
-//! TODO:
-//!
-//! This protocol implements set reconciliation, but does so in a rather
-//! inefficient way (bulk transfer of all the orders). There more efficient
-//! reconciliation algorithms out there that efficiently compute the set
-//! difference first. For an academic overview see
-//!
-//! * Ivo Kubjas (2014). "Set Reconciliation Master Thesis". [pdf](https://comserv.cs.ut.ee/home/files/kubjas_cybersecurity_2014.pdf?study=ATILoputoo&reference=E731444824814AE27FE0D91FA073B5F3FE61038D)
-//!
-//! There is a crate for Minisketch that should allow prototyping something:
-//!
-//! <https://docs.rs/minisketch-rs/0.1.9/minisketch_rs/>
-//!
-//! TODO: De-stringify types such as Hashes, etc.
+//! * De-stringify types such as Hashes, etc.
 
 use crate::prelude::*;
-use async_trait::async_trait;
-use libp2p::{
-    core::ProtocolName,
-    request_response::{
-        ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
-        RequestResponseEvent,
-    },
-};
-use serde::{Deserialize, Serialize};
-use smallvec::{smallvec, SmallVec};
-use std::{
-    io,
-    io::{Error, ErrorKind},
-    iter,
-};
-
-/// Maximum message size
-const MAX_SIZE: usize = 1024;
-
-#[derive(Clone, Debug)]
-pub struct Version();
-
-#[derive(Clone, Debug)]
-pub struct Codec();
-
-pub type Config = RequestResponseConfig;
-pub type Protocol = RequestResponse<Codec>;
-pub type Event = RequestResponseEvent<Request, Response>;
 
 /// The OrderSync protocol uses the same internally tagged JSON object
 /// for request and response.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
-enum Message {
+pub enum Message {
     Request(Request),
     Response(Response),
 }
@@ -268,146 +227,6 @@ impl From<ResponseMetadata> for RequestMetadata {
     }
 }
 
-pub fn new(config: Config) -> Protocol {
-    let protocols = iter::once((Version(), ProtocolSupport::Full));
-    RequestResponse::new(Codec(), protocols, config)
-}
-
-impl ProtocolName for Version {
-    fn protocol_name(&self) -> &[u8] {
-        b"/0x-mesh/order-sync/version/0"
-    }
-}
-
-/// Read Serde-JSON from an AsyncRead.
-///
-/// This is difficult because there is no framing other than JSON succeeding to
-/// parse. All we can do, it seems, is to repeatedly try parsing and wait for
-/// more content to arrive if it fails.
-///
-/// TODO: Maximum size
-///
-/// TODO: Remove once Serde gains async support.
-/// See <https://github.com/serde-rs/json/issues/316>
-async fn read_json<R, T>(io: &mut R) -> io::Result<T>
-where
-    R: AsyncRead + Unpin + Send,
-    T: for<'a> Deserialize<'a> + std::fmt::Debug,
-{
-    trace!("Attempting to read JSON from socket");
-    let mut buffer = Vec::new();
-    loop {
-        // Read another (partial) block
-        let mut block = [0u8; 1024];
-        let n = match io.read(&mut block).await {
-            Ok(0) => {
-                Err(Error::new(
-                    ErrorKind::UnexpectedEof,
-                    "Unexpected EOF while reading JSON.",
-                ))
-            }
-            r => r,
-        }?;
-        buffer.extend(&block[..n]);
-        trace!("Read {} more bytes, total {} in buffer", n, buffer.len());
-
-        // Try to parse
-        let result = serde_json::de::from_slice::<T>(&buffer);
-        match result {
-            Err(e) if e.is_eof() => {
-                // Read some more
-                continue;
-            }
-            _ => {}
-        }
-
-        trace!("Parse result {:?}", result);
-        if result.is_err() {
-            error!("Could not parse: {}", String::from_utf8_lossy(&buffer));
-        }
-        return Ok(result?);
-    }
-}
-
-#[async_trait]
-impl RequestResponseCodec for Codec {
-    type Protocol = Version;
-    type Request = Request;
-    type Response = Response;
-
-    async fn read_request<T>(
-        &mut self,
-        _protocol: &Self::Protocol,
-        io: &mut T,
-    ) -> io::Result<Self::Request>
-    where
-        T: AsyncRead + Unpin + Send,
-    {
-        debug!("OrderSync receiving request");
-        let message = read_json::<_, Message>(io).await?;
-        match message {
-            Message::Request(obj) => Ok(obj),
-            _ => {
-                Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Expected Request object",
-                ))
-            }
-        }
-    }
-
-    async fn read_response<T>(
-        &mut self,
-        _protocol: &Self::Protocol,
-        io: &mut T,
-    ) -> io::Result<Self::Response>
-    where
-        T: AsyncRead + Unpin + Send,
-    {
-        debug!("OrderSync receiving response");
-        let message = read_json::<_, Message>(io).await?;
-        match message {
-            Message::Response(obj) => Ok(obj),
-            _ => {
-                Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Expected Response object",
-                ))
-            }
-        }
-    }
-
-    async fn write_request<T>(
-        &mut self,
-        _protocol: &Self::Protocol,
-        io: &mut T,
-        req: Self::Request,
-    ) -> io::Result<()>
-    where
-        T: AsyncWrite + Unpin + Send,
-    {
-        // OPT: Streaming write
-        let message = Message::Request(req);
-        debug!("OrderSync send request: {:?}", &message);
-        io.write_all(serde_json::to_vec(&message)?.as_slice()).await
-    }
-
-    async fn write_response<T>(
-        &mut self,
-        _protocol: &Self::Protocol,
-        io: &mut T,
-        res: Self::Response,
-    ) -> io::Result<()>
-    where
-        T: AsyncWrite + Unpin + Send,
-    {
-        // OPT: Streaming write
-        let message = Message::Response(res);
-        debug!("OrderSync send response: {:?}", &message);
-        io.write_all(serde_json::to_vec(&message)?.as_slice()).await
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -539,7 +358,7 @@ mod test {
 
     #[test]
     fn test_parse_response() {
-        let response = include_str!("../../test/response.json");
+        let response = include_str!("../../../../test/response.json");
         let message = serde_json::from_str::<Message>(response).unwrap();
     }
 }

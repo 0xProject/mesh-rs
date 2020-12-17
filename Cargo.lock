@@ -1865,6 +1865,7 @@ dependencies = [
  "serde_json",
  "smallvec",
  "structopt",
+ "thiserror",
  "tokio 0.3.5",
  "tokio-compat-02",
 ]

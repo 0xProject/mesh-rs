@@ -24,7 +24,7 @@ pub(crate) type Libp2pTransport = libp2p::core::transport::Boxed<(PeerId, Stream
 
 /// Create a transport for TCP/IP and WebSockets over TCP/IP with Secio
 /// encryption and either yamux or else mplex multiplexing.
-pub(crate) async fn make_transport(
+pub(crate) fn make_transport(
     peer_id_keys: identity::Keypair,
 ) -> Result<(Libp2pTransport, Arc<BandwidthSinks>)> {
     // Create transport with TCP, DNS and WS
@@ -39,6 +39,7 @@ pub(crate) async fn make_transport(
             DnsConfig::new(tcp_transport).context("Creating /dns/ transport")?;
 
         // Websocket transport over TCP/IP
+        // TODO: Secure websocket.
         let ws_transport = WsConfig::new(tcp_dns_transport.clone());
 
         // Combine transports
