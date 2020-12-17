@@ -72,14 +72,6 @@ pub async fn run() -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
-    use float_eq::assert_float_eq;
-    use pretty_assertions::assert_eq;
-    use proptest::prelude::*;
-}
-
 #[cfg(feature = "bench")]
 pub(crate) mod bench {
     use super::*;

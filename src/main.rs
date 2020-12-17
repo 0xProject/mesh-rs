@@ -94,9 +94,13 @@ pub fn main() -> Result<()> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use float_eq::assert_float_eq;
-    use pretty_assertions::assert_eq;
-    use proptest::prelude::*;
+    use crate::test::prelude::{assert_eq, *};
+
+    pub(crate) mod prelude {
+        pub use float_eq::{assert_float_eq, assert_float_ne};
+        pub use pretty_assertions::{assert_eq, assert_ne};
+        pub use proptest::prelude::*;
+    }
 
     #[test]
     fn parse_args() {

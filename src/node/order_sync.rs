@@ -27,9 +27,8 @@ use libp2p::{
 use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{
-    collections::HashMap,
     io,
-    io::{Error, ErrorKind, Result},
+    io::{Error, ErrorKind},
     iter,
 };
 
@@ -57,14 +56,14 @@ enum Message {
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Request {
-    subprotocols: SmallVec<[String; 2]>,
-    metadata:     RequestMetadataContainer,
+    pub subprotocols: SmallVec<[String; 2]>,
+    pub metadata:     RequestMetadataContainer,
 }
 
 /// Redundant wrapper for metadata
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct RequestMetadataContainer {
-    metadata: SmallVec<[RequestMetadata; 2]>,
+    pub metadata: SmallVec<[RequestMetadata; 2]>,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -90,12 +89,12 @@ pub enum RequestMetadata {
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Response {
-    orders: Vec<Order>,
+    pub orders: Vec<Order>,
 
-    complete: bool,
+    pub complete: bool,
 
     #[serde(flatten)]
-    metadata: ResponseMetadata,
+    pub metadata: ResponseMetadata,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -118,35 +117,35 @@ pub enum ResponseMetadata {
 #[derive(Clone, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Order {
-    chain_id:                i64, // Note: Unlike elsewhere, not renamed to chainID
-    exchange_address:        String,
-    maker_address:           String,
-    maker_asset_data:        String,
-    maker_fee_asset_data:    String,
-    maker_asset_amount:      String,
-    maker_fee:               String,
-    taker_address:           String,
-    taker_asset_data:        String,
-    taker_fee_asset_data:    String,
-    taker_asset_amount:      String,
-    taker_fee:               String,
-    sender_address:          String,
-    fee_recipient_address:   String,
-    expiration_time_seconds: String,
-    salt:                    String,
-    signature:               String,
+    pub chain_id:                i64, // Note: Unlike elsewhere, not renamed to chainID
+    pub exchange_address:        String,
+    pub maker_address:           String,
+    pub maker_asset_data:        String,
+    pub maker_fee_asset_data:    String,
+    pub maker_asset_amount:      String,
+    pub maker_fee:               String,
+    pub taker_address:           String,
+    pub taker_asset_data:        String,
+    pub taker_fee_asset_data:    String,
+    pub taker_asset_amount:      String,
+    pub taker_fee:               String,
+    pub sender_address:          String,
+    pub fee_recipient_address:   String,
+    pub expiration_time_seconds: String,
+    pub salt:                    String,
+    pub signature:               String,
 }
 
 /// See <https://github.com/0xProject/0x-mesh/blob/b2a12fdb186fb56eb7d99dc449b9773d0943ee8e/orderfilter/shared.go#L144>
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OrderFilter {
-    custom_order_schema: String,
+    pub custom_order_schema: String,
 
     #[serde(rename = "chainID")]
-    chain_id: i64,
+    pub chain_id: i64,
 
-    exchange_address: String,
+    pub exchange_address: String,
 }
 
 impl Default for OrderFilter {
@@ -160,6 +159,7 @@ impl Default for OrderFilter {
 }
 
 impl OrderFilter {
+    #[allow(dead_code)]
     pub fn mainnet_v3() -> Self {
         OrderFilter {
             chain_id: 1,
@@ -168,6 +168,7 @@ impl OrderFilter {
         }
     }
 
+    #[allow(dead_code)]
     pub fn mainnet_v2() -> Self {
         OrderFilter {
             chain_id: 1,
@@ -180,6 +181,19 @@ impl OrderFilter {
 impl Default for Request {
     fn default() -> Self {
         Request::from(OrderFilter::default())
+    }
+}
+
+impl Default for Response {
+    fn default() -> Self {
+        Response {
+            complete: true,
+            orders:   vec![],
+            metadata: ResponseMetadata::V0 {
+                page:        0,
+                snapshot_id: "".into(),
+            },
+        }
     }
 }
 
@@ -235,7 +249,7 @@ where
     R: AsyncRead + Unpin + Send,
     T: for<'a> Deserialize<'a> + std::fmt::Debug,
 {
-    warn!("Attempting to read JSON from socket");
+    trace!("Attempting to read JSON from socket");
     let mut buffer = Vec::new();
     loop {
         // Read another (partial) block
@@ -250,7 +264,7 @@ where
             r => r,
         }?;
         buffer.extend(&block[..n]);
-        info!("Read {} more bytes, total {} in buffer", n, buffer.len());
+        trace!("Read {} more bytes, total {} in buffer", n, buffer.len());
 
         // Try to parse
         let result = serde_json::de::from_slice::<T>(&buffer);
@@ -262,9 +276,9 @@ where
             _ => {}
         }
 
-        warn!("Parse result {:?}", result);
+        trace!("Parse result {:?}", result);
         if result.is_err() {
-            warn!("Buffer {}", String::from_utf8_lossy(&buffer));
+            error!("Could not parse: {}", String::from_utf8_lossy(&buffer));
         }
         return Ok(result?);
     }
@@ -284,9 +298,8 @@ impl RequestResponseCodec for Codec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        warn!("OrderSync received request");
+        debug!("OrderSync receiving request");
         let message = read_json::<_, Message>(io).await?;
-        warn!("OrderSync received request: {:?}", &message);
         match message {
             Message::Request(obj) => Ok(obj),
             _ => {
@@ -306,9 +319,8 @@ impl RequestResponseCodec for Codec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        warn!("OrderSync received response");
+        debug!("OrderSync receiving response");
         let message = read_json::<_, Message>(io).await?;
-        warn!("OrderSync received response: {:?}", &message);
         match message {
             Message::Response(obj) => Ok(obj),
             _ => {
@@ -331,7 +343,7 @@ impl RequestResponseCodec for Codec {
     {
         // OPT: Streaming write
         let message = Message::Request(req);
-        warn!("OrderSync send request: {:?}", &message);
+        debug!("OrderSync send request: {:?}", &message);
         io.write_all(serde_json::to_vec(&message)?.as_slice()).await
     }
 
@@ -346,7 +358,7 @@ impl RequestResponseCodec for Codec {
     {
         // OPT: Streaming write
         let message = Message::Response(res);
-        warn!("OrderSync send response: {:?}", &message);
+        debug!("OrderSync send response: {:?}", &message);
         io.write_all(serde_json::to_vec(&message)?.as_slice()).await
     }
 }
@@ -354,7 +366,7 @@ impl RequestResponseCodec for Codec {
 #[cfg(test)]
 mod test {
     use super::*;
-    use pretty_assertions::assert_eq;
+    use crate::test::prelude::assert_eq;
     use serde_json::json;
 
     #[test]

@@ -28,6 +28,7 @@ use libp2p::{
     },
     mdns::{Mdns, MdnsEvent},
     ping::{Ping, PingConfig, PingEvent},
+    request_response::{RequestResponseEvent, RequestResponseMessage},
     swarm::{NetworkBehaviour, NetworkBehaviourEventProcess},
     Multiaddr, NetworkBehaviour, PeerId,
 };
@@ -129,8 +130,22 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for MyBehaviour {
 
 impl NetworkBehaviourEventProcess<order_sync::Event> for MyBehaviour {
     /// Called when `identify` produces and event.
+    #[rustfmt::skip]
     fn inject_event(&mut self, event: order_sync::Event) {
-        warn!("OrderSync event: {:?}", event);
+        use RequestResponseEvent::*;
+        use RequestResponseMessage::*;
+        match event {
+            Message {peer, message: Request {request_id, request, channel}} => {
+                let response = order_sync::Response::default();
+                self.order_sync.send_response(channel, response).map_err(|err| {
+                    error!("Error sending response {:?}", err);
+                });
+            }
+            Message {peer, message: Response {request_id, response}} => {
+                
+            }
+            event => warn!("OrderSync event: {:?}", event),
+        }
     }
 }
 
@@ -187,7 +202,7 @@ impl MyBehaviour {
         let order_sync_config = order_sync::Config::default();
         let order_sync = order_sync::new(order_sync_config);
 
-        let mut behaviour = MyBehaviour {
+        let behaviour = MyBehaviour {
             mdns,
             kademlia,
             identify,
@@ -241,7 +256,7 @@ impl MyBehaviour {
     /// ordersync has been completed with minPeers, using an exponential backoff
     /// strategy between retries.
     pub(crate) fn get_orders(&mut self, peer: PeerId) -> Result<()> {
-        let request = order_sync::Request::from(order_sync::OrderFilter::mainnet_v2());
+        let request = order_sync::Request::from(order_sync::OrderFilter::mainnet_v3());
         let id = self.order_sync.send_request(&peer, request);
         info!("Req({})", id);
         Ok(())
