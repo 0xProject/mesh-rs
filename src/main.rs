@@ -14,10 +14,8 @@ mod prelude {
     pub use tokio::prelude::*;
 }
 
-
 use prelude::*;
 use structopt::StructOpt;
-
 
 #[derive(Debug, PartialEq, StructOpt)]
 struct Options {

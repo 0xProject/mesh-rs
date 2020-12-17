@@ -1,23 +1,11 @@
 //! Pub sub behaviour for order sharing.
 
-
 use libp2p::{
-    core::ProtocolName,
-    gossipsub::{Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity, Topic},
-    identify::{Identify, IdentifyEvent, IdentifyInfo},
+    gossipsub::{Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity},
     identity::Keypair,
-    kad::{
-        record::store::MemoryStore, Kademlia, KademliaBucketInserts, KademliaConfig, KademliaEvent,
-    },
-    mdns::{Mdns, MdnsEvent},
-    ping::{Ping, PingConfig, PingEvent},
-    request_response::{
-        InboundFailure, OutboundFailure, RequestId, RequestResponseEvent, RequestResponseMessage,
-    },
     swarm::NetworkBehaviourEventProcess,
-    Multiaddr, NetworkBehaviour, PeerId,
+    NetworkBehaviour,
 };
-
 
 #[derive(NetworkBehaviour)]
 pub struct PubSub {

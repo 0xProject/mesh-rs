@@ -16,23 +16,18 @@
 mod json_codec;
 mod messages;
 
-use self::{
-    json_codec::JsonCodec,
-    messages::{Message},
-};
-
+use self::{json_codec::JsonCodec, messages::Message};
 
 use libp2p::{
     core::ProtocolName,
     request_response::{
-        ProtocolSupport, RequestResponse, RequestResponseConfig,
-        RequestResponseEvent,
+        ProtocolSupport, RequestResponse, RequestResponseConfig, RequestResponseEvent,
     },
     swarm::NetworkBehaviourEventProcess,
     NetworkBehaviour,
 };
 
-use std::{iter};
+use std::iter;
 
 /// Maximum message size
 const MAX_SIZE: usize = 1024;
@@ -65,6 +60,6 @@ impl ProtocolName for Version {
     }
 }
 
-impl NetworkBehaviourEventProcess<RequestResponseEvent<Message, Message>> for OrderSync {
-    fn inject_event(&mut self, _event: RequestResponseEvent<Message, Message>) {}
+impl NetworkBehaviourEventProcess<Event> for OrderSync {
+    fn inject_event(&mut self, _event: Event) {}
 }

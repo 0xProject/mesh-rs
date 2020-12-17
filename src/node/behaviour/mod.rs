@@ -18,11 +18,7 @@ mod discovery;
 mod order_sync;
 mod pubsub;
 
-use self::{
-    discovery::{Discovery},
-    order_sync::OrderSync,
-    pubsub::PubSub,
-};
+use self::{discovery::Discovery, order_sync::OrderSync, pubsub::PubSub};
 use crate::prelude::*;
 use libp2p::{identity::Keypair, swarm::NetworkBehaviourEventProcess, NetworkBehaviour};
 

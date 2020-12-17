@@ -321,8 +321,8 @@ mod test {
                             order_filter:   order_filter.clone(),
                         },
                         RequestMetadata::V0 {
-                            page:         0,
-                            snapshot_id:  "".into(),
+                            page: 0,
+                            snapshot_id: "".into(),
                             order_filter,
                         },
                     ],

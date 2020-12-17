@@ -7,7 +7,7 @@ use libp2p::{
     bandwidth::BandwidthSinks, core::network::NetworkInfo, gossipsub::Topic, identity,
     swarm::SwarmBuilder, Multiaddr, PeerId, Swarm,
 };
-use std::{sync::Arc};
+use std::sync::Arc;
 
 const TOPIC: &str = "/0x-orders/version/3/chain/1/schema/e30=";
 

@@ -1,7 +1,5 @@
 use crate::prelude::*;
-use std::{
-    io::{Error, ErrorKind, Result},
-};
+use std::io::{Error, ErrorKind, Result};
 
 /// Read a Serde Serialize from an futures::io::AsyncRead.
 ///

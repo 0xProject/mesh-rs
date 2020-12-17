@@ -23,7 +23,7 @@ use libp2p::{
     },
     mdns::{Mdns, MdnsEvent},
     ping::{Ping, PingConfig, PingEvent},
-    swarm::{NetworkBehaviour, NetworkBehaviourEventProcess},
+    swarm::NetworkBehaviourEventProcess,
     Multiaddr, NetworkBehaviour, PeerId,
 };
 use std::time::Duration;
