@@ -113,8 +113,29 @@ pub enum ResponseMetadata {
     V1 { next_min_order_hash: String },
 }
 
+/// See <https://github.com/0xProject/0x-mesh/blob/b2a12fdb186fb56eb7d99dc449b9773d0943ee8e/zeroex/order.go#L538>
 #[derive(Clone, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
-pub struct Order(HashMap<String, String>);
+#[serde(rename_all = "camelCase")]
+pub struct Order {
+    #[serde(rename = "chainId")]
+    chain_id:                i64,
+    exchange_address:        String,
+    maker_address:           String,
+    maker_asset_data:        String,
+    maker_fee_asset_data:    String,
+    maker_asset_amount:      String,
+    maker_fee:               String,
+    taker_address:           String,
+    taker_asset_data:        String,
+    taker_fee_asset_data:    String,
+    taker_asset_amount:      String,
+    taker_fee:               String,
+    sender_address:          String,
+    fee_recipient_address:   String,
+    expiration_time_seconds: String,
+    salt:                    String,
+    signature:               String,
+}
 
 /// See <https://github.com/0xProject/0x-mesh/blob/b2a12fdb186fb56eb7d99dc449b9773d0943ee8e/orderfilter/shared.go#L144>
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -443,28 +464,14 @@ mod test {
                 snapshot_id: "0x172b4c50e71cb73ed3ac8d191a6ddaf683d70757c848b62f6b33b3845bcbecbd"
                     .into(),
             },
-            orders:   vec![Order(
-                [
-                    ("chainId", "1"),
-                    (
-                        "exchangeAddress",
-                        "0x61935cbdd02287b511119ddb11aeb42f1593b7ef",
-                    ),
-                ]
-                .iter()
-                .map(|(a, b)| (a.to_string(), b.to_string()))
-                .collect(),
-            )],
+            orders:   vec![], // TODO: Add content
         });
         assert_eq!(
             serde_json::to_value(&message).unwrap(),
             json!({
                 "type": "Response",
                 "subprotocol":"/pagination-with-filter/version/0",
-                "orders":[{
-                    "chainId": "1",
-                    "exchangeAddress": "0x61935cbdd02287b511119ddb11aeb42f1593b7ef",
-                }],
+                "orders":[],
                 "complete":false,
                 "metadata": {
                     "page":0,"snapshotID":"0x172b4c50e71cb73ed3ac8d191a6ddaf683d70757c848b62f6b33b3845bcbecbd"
