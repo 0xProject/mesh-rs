@@ -25,6 +25,7 @@ use libp2p::{
     },
 };
 use serde::{Deserialize, Serialize};
+use smallvec::{smallvec, SmallVec};
 use std::{
     collections::HashMap,
     io,
@@ -56,14 +57,14 @@ enum Message {
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Request {
-    subprotocols: Vec<String>,
+    subprotocols: SmallVec<[String; 2]>,
     metadata:     RequestMetadataContainer,
 }
 
 /// Redundant wrapper for metadata
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct RequestMetadataContainer {
-    metadata: Vec<RequestMetadata>,
+    metadata: SmallVec<[RequestMetadata; 2]>,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -186,12 +187,12 @@ impl Default for Request {
 impl From<OrderFilter> for Request {
     fn from(order_filter: OrderFilter) -> Self {
         Request {
-            subprotocols: vec![
+            subprotocols: smallvec![
                 "/pagination-with-filter/version/1".into(),
                 "/pagination-with-filter/version/0".into(),
             ],
             metadata:     RequestMetadataContainer {
-                metadata: vec![
+                metadata: smallvec![
                     RequestMetadata::V1 {
                         min_order_hash:
                             "0x0000000000000000000000000000000000000000000000000000000000000000"
@@ -432,12 +433,12 @@ mod test {
         assert_eq!(
             message,
             Message::Request(Request {
-                subprotocols: vec![
+                subprotocols: smallvec![
                     "/pagination-with-filter/version/1".into(),
                     "/pagination-with-filter/version/0".into(),
                 ],
                 metadata:     RequestMetadataContainer {
-                    metadata: vec![
+                    metadata: smallvec![
                         RequestMetadata::V1 {
                             min_order_hash:
                                 "0x0000000000000000000000000000000000000000000000000000000000000000"

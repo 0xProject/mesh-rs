@@ -1863,6 +1863,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
+ "smallvec",
  "structopt",
  "tokio 0.3.5",
  "tokio-compat-02",
@@ -2759,6 +2760,9 @@ name = "smallvec"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae524f056d7d770e174287294f562e95044c68e88dec909a00d2094805db9d75"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "snow"
