@@ -78,8 +78,8 @@ pub enum RequestMetadata {
         #[serde(rename = "orderfilter")]
         order_filter: OrderFilter,
     },
+    #[serde(rename_all = "camelCase")]
     V1 {
-        #[serde(rename = "minOrderHash")]
         min_order_hash: String,
 
         #[serde(rename = "orderfilter")]
@@ -99,6 +99,7 @@ pub struct Response {
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(tag = "subprotocol", content = "metadata")]
+#[serde(rename_all = "camelCase")]
 pub enum ResponseMetadata {
     #[serde(rename = "/pagination-with-filter/version/0")]
     V0 {
@@ -108,17 +109,24 @@ pub enum ResponseMetadata {
         page: i64,
     },
     #[serde(rename = "/pagination-with-filter/version/1")]
-    V1 {
-        #[serde(rename = "nextMinOrderHash")]
-        next_min_order_hash: String,
-    },
+    #[serde(rename_all = "camelCase")]
+    V1 { next_min_order_hash: String },
 }
 
 #[derive(Clone, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
 pub struct Order(HashMap<String, String>);
 
+/// See <https://github.com/0xProject/0x-mesh/blob/b2a12fdb186fb56eb7d99dc449b9773d0943ee8e/orderfilter/shared.go#L144>
 #[derive(Clone, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
-pub struct OrderFilter(HashMap<String, serde_json::value::Value>);
+#[serde(rename_all = "camelCase")]
+pub struct OrderFilter {
+    custom_order_schema: String,
+
+    #[serde(rename = "chainID")]
+    chain_id: i64,
+
+    exchange_address: String,
+}
 
 pub fn new(config: Config) -> Protocol {
     let protocols = iter::once((Version(), ProtocolSupport::Full));
@@ -309,52 +317,21 @@ mod test {
                     "metadata": [
                         {
                             "minOrderHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                            "orderfilter": {},
+                            "orderfilter": {
+                                "chainID": 0,
+                                "customOrderSchema": "",
+                                "exchangeAddress": "",
+                            },
                         },
                         {
                             "page": 0,
                             "snapshotID": "",
-                            "orderfilter": {},
-                        }
-                    ],
-                }
-            })
-        );
-    }
-
-    #[test]
-    fn test_filter_request_json() {
-        let message = Message::Request(Request {
-            subprotocols: vec!["/pagination-with-filter/version/1".into()],
-            metadata:     RequestMetadataContainer {
-                metadata: vec![RequestMetadata::V1 {
-                    min_order_hash:
-                        "0x0000000000000000000000000000000000000000000000000000000000000000".into(),
-                    order_filter:   OrderFilter(
-                        [("a".to_string(), json!("b")), ("b".to_string(), json!(5))]
-                            .iter()
-                            .cloned()
-                            .collect(),
-                    ),
-                }],
-            },
-        });
-        assert_eq!(
-            serde_json::to_value(&message).unwrap(),
-            json!({
-                "type": "Request",
-                "subprotocols": [
-                    "/pagination-with-filter/version/1",
-                ],
-                "metadata": {
-                    "metadata": [
-                        {
-                            "minOrderHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
                             "orderfilter": {
-                                "a":"b",
-                                "b":5,
+                                "chainID": 0,
+                                "customOrderSchema": "",
+                                "exchangeAddress": "",
                             },
-                        },
+                        }
                     ],
                 }
             })
@@ -392,19 +369,11 @@ mod test {
             }
         }"#;
         let message = serde_json::from_str::<Message>(request).unwrap();
-        let order_filter = OrderFilter(
-            [
-                ("chainID".to_string(), json!(4)),
-                ("customOrderSchema".to_string(), json!("{}")),
-                (
-                    "exchangeAddress".to_string(),
-                    json!("0x198805e9682fceec29413059b68550f92868c129"),
-                ),
-            ]
-            .iter()
-            .cloned()
-            .collect(),
-        );
+        let order_filter = OrderFilter {
+            chain_id:            4,
+            custom_order_schema: "{}".into(),
+            exchange_address:    "0x198805e9682fceec29413059b68550f92868c129".into(),
+        };
         assert_eq!(
             message,
             Message::Request(Request {

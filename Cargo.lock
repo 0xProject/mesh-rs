@@ -167,19 +167,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-compat"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f0bb3019d8e5ffe88594b122ba9ba37280a3bc8d94a742b56c8417457215ae4"
-dependencies = [
- "futures-core",
- "futures-io",
- "once_cell",
- "pin-project-lite 0.1.11",
- "tokio 0.2.23",
-]
-
-[[package]]
 name = "async-executor"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1862,7 +1849,6 @@ name = "mesh"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-compat",
  "async-trait",
  "chrono",
  "criterion",
