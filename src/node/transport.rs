@@ -20,11 +20,11 @@ use std::{sync::Arc, time::Duration};
 
 use upgrade::{MapInboundUpgrade, MapOutboundUpgrade};
 
-pub(crate) type Libp2pTransport = libp2p::core::transport::Boxed<(PeerId, StreamMuxerBox)>;
+pub type Libp2pTransport = libp2p::core::transport::Boxed<(PeerId, StreamMuxerBox)>;
 
 /// Create a transport for TCP/IP and WebSockets over TCP/IP with Secio
 /// encryption and either yamux or else mplex multiplexing.
-pub(crate) fn make_transport(
+pub fn make_transport(
     peer_id_keys: identity::Keypair,
 ) -> Result<(Libp2pTransport, Arc<BandwidthSinks>)> {
     // Create transport with TCP, DNS and WS
@@ -66,7 +66,7 @@ pub(crate) fn make_transport(
 
         // Secio
         // The Go version of 0x-mesh only supports Secio.
-        let secio = secio::SecioConfig::new(peer_id_keys.clone());
+        let secio = secio::SecioConfig::new(peer_id_keys);
 
         // We need to do some monad stack shuffling:
         // `Either<(A, B), (A, C)>` to `(A, Either<B, C>)`

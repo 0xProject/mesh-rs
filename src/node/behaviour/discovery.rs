@@ -16,7 +16,7 @@
 
 use crate::prelude::*;
 use libp2p::{
-    identify::{Identify, IdentifyEvent, IdentifyInfo},
+    identify::{Identify, IdentifyEvent},
     identity::Keypair,
     kad::{
         record::store::MemoryStore, Kademlia, KademliaBucketInserts, KademliaConfig, KademliaEvent,
@@ -29,7 +29,7 @@ use libp2p::{
 use std::time::Duration;
 
 const DHT_PROTOCOL_ID: &[u8] = b"/0x-mesh-dht/version/1";
-const BOOTNODES: &'static [(&str, &str)] = &[
+const BOOTNODES: &[(&str, &str)] = &[
     (
         "16Uiu2HAmGx8Z6gdq5T5AQE54GMtqDhDFhizywTy1o28NJbAMMumF",
         "/dns4/bootstrap-0.mesh.0x.org/tcp/60558",
@@ -90,7 +90,7 @@ impl Discovery {
         // Ping protocol
         let ping = Ping::new(PingConfig::new());
 
-        Ok(Discovery {
+        Ok(Self {
             mdns,
             kademlia,
             identify,
@@ -100,17 +100,17 @@ impl Discovery {
 }
 
 impl NetworkBehaviourEventProcess<MdnsEvent> for Discovery {
-    fn inject_event(&mut self, event: MdnsEvent) {}
+    fn inject_event(&mut self, _event: MdnsEvent) {}
 }
 
 impl NetworkBehaviourEventProcess<KademliaEvent> for Discovery {
-    fn inject_event(&mut self, event: KademliaEvent) {}
+    fn inject_event(&mut self, _event: KademliaEvent) {}
 }
 
 impl NetworkBehaviourEventProcess<IdentifyEvent> for Discovery {
-    fn inject_event(&mut self, event: IdentifyEvent) {}
+    fn inject_event(&mut self, _event: IdentifyEvent) {}
 }
 
 impl NetworkBehaviourEventProcess<PingEvent> for Discovery {
-    fn inject_event(&mut self, event: PingEvent) {}
+    fn inject_event(&mut self, _event: PingEvent) {}
 }

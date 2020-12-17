@@ -109,7 +109,7 @@ pub struct OrderFilter {
 
 impl Default for OrderFilter {
     fn default() -> Self {
-        OrderFilter {
+        Self {
             chain_id:            i64::default(),
             custom_order_schema: "{}".into(),
             exchange_address:    "0x0000000000000000000000000000000000000000".into(),
@@ -120,32 +120,32 @@ impl Default for OrderFilter {
 impl OrderFilter {
     #[allow(dead_code)]
     pub fn mainnet_v3() -> Self {
-        OrderFilter {
+        Self {
             chain_id: 1,
             exchange_address: "0x61935cbdd02287b511119ddb11aeb42f1593b7ef".into(),
-            ..OrderFilter::default()
+            ..Self::default()
         }
     }
 
     #[allow(dead_code)]
     pub fn mainnet_v2() -> Self {
-        OrderFilter {
+        Self {
             chain_id: 1,
             exchange_address: "0x080bf510fcbf18b91105470639e9561022937712".into(),
-            ..OrderFilter::default()
+            ..Self::default()
         }
     }
 }
 
 impl Default for Request {
     fn default() -> Self {
-        Request::from(OrderFilter::default())
+        Self::from(OrderFilter::default())
     }
 }
 
 impl Default for Response {
     fn default() -> Self {
-        Response {
+        Self {
             complete: true,
             orders:   vec![],
             metadata: ResponseMetadata::V0 {
@@ -158,7 +158,7 @@ impl Default for Response {
 
 impl From<OrderFilter> for Request {
     fn from(order_filter: OrderFilter) -> Self {
-        Request {
+        Self {
             subprotocols: smallvec![
                 "/pagination-with-filter/version/1".into(),
                 "/pagination-with-filter/version/0".into(),
@@ -209,7 +209,7 @@ impl From<ResponseMetadata> for RequestMetadata {
     fn from(response: ResponseMetadata) -> Self {
         match response {
             ResponseMetadata::V0 { page, snapshot_id } => {
-                RequestMetadata::V0 {
+                Self::V0 {
                     page: page + 1,
                     snapshot_id,
                     order_filter: OrderFilter::default(),
@@ -218,7 +218,7 @@ impl From<ResponseMetadata> for RequestMetadata {
             ResponseMetadata::V1 {
                 next_min_order_hash,
             } => {
-                RequestMetadata::V1 {
+                Self::V1 {
                     min_order_hash: next_min_order_hash,
                     order_filter:   OrderFilter::default(),
                 }
@@ -323,7 +323,7 @@ mod test {
                         RequestMetadata::V0 {
                             page:         0,
                             snapshot_id:  "".into(),
-                            order_filter: order_filter.clone(),
+                            order_filter,
                         },
                     ],
                 },
@@ -359,6 +359,6 @@ mod test {
     #[test]
     fn test_parse_response() {
         let response = include_str!("../../../../test/response.json");
-        let message = serde_json::from_str::<Message>(response).unwrap();
+        let _message = serde_json::from_str::<Message>(response).unwrap();
     }
 }

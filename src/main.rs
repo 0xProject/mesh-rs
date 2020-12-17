@@ -14,10 +14,10 @@ mod prelude {
     pub use tokio::prelude::*;
 }
 
-use env_logger;
+
 use prelude::*;
 use structopt::StructOpt;
-use tokio;
+
 
 #[derive(Debug, PartialEq, StructOpt)]
 struct Options {
@@ -101,7 +101,7 @@ mod test {
     use super::*;
     use crate::test::prelude::{assert_eq, *};
 
-    pub(crate) mod prelude {
+    pub mod prelude {
         pub use float_eq::{assert_float_eq, assert_float_ne};
         pub use pretty_assertions::{assert_eq, assert_ne};
         pub use proptest::prelude::*;

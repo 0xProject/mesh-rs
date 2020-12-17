@@ -1,6 +1,5 @@
 use crate::prelude::*;
 use std::{
-    fmt::Debug,
     io::{Error, ErrorKind, Result},
 };
 
@@ -23,7 +22,7 @@ where
     let mut buffer = Vec::new();
     loop {
         // Read another (partial) block
-        let mut block = [0u8; 1024];
+        let mut block = [0_u8; 1024];
         let n = match io.read(&mut block).await {
             Ok(0) => {
                 Err(Error::new(

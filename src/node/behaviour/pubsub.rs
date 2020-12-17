@@ -1,6 +1,6 @@
 //! Pub sub behaviour for order sharing.
 
-use crate::prelude::*;
+
 use libp2p::{
     core::ProtocolName,
     gossipsub::{Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity, Topic},
@@ -17,10 +17,10 @@ use libp2p::{
     swarm::NetworkBehaviourEventProcess,
     Multiaddr, NetworkBehaviour, PeerId,
 };
-use std::{collections::HashMap, time::Duration};
+
 
 #[derive(NetworkBehaviour)]
-pub(crate) struct PubSub {
+pub struct PubSub {
     gossipsub: Gossipsub,
 }
 
@@ -28,14 +28,14 @@ impl PubSub {
     pub(crate) fn new(peer_key: Keypair) -> Self {
         // GossipSub
         let gossipsub_config = GossipsubConfigBuilder::new()
-            .max_transmit_size(262144)
+            .max_transmit_size(262_144)
             .build();
-        let mut gossipsub = Gossipsub::new(MessageAuthenticity::Signed(peer_key), gossipsub_config);
+        let gossipsub = Gossipsub::new(MessageAuthenticity::Signed(peer_key), gossipsub_config);
 
         Self { gossipsub }
     }
 }
 
 impl NetworkBehaviourEventProcess<GossipsubEvent> for PubSub {
-    fn inject_event(&mut self, event: GossipsubEvent) {}
+    fn inject_event(&mut self, _event: GossipsubEvent) {}
 }

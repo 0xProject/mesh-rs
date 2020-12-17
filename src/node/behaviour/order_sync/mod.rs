@@ -18,21 +18,21 @@ mod messages;
 
 use self::{
     json_codec::JsonCodec,
-    messages::{Message, Request, Response},
+    messages::{Message},
 };
-use crate::{prelude::*, utils::read_json};
-use async_trait::async_trait;
+
+
 use libp2p::{
     core::ProtocolName,
     request_response::{
-        ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
+        ProtocolSupport, RequestResponse, RequestResponseConfig,
         RequestResponseEvent,
     },
     swarm::NetworkBehaviourEventProcess,
     NetworkBehaviour,
 };
-use serde::{Deserialize, Serialize};
-use std::{io, iter};
+
+use std::{iter};
 
 /// Maximum message size
 const MAX_SIZE: usize = 1024;
@@ -66,5 +66,5 @@ impl ProtocolName for Version {
 }
 
 impl NetworkBehaviourEventProcess<RequestResponseEvent<Message, Message>> for OrderSync {
-    fn inject_event(&mut self, event: RequestResponseEvent<Message, Message>) {}
+    fn inject_event(&mut self, _event: RequestResponseEvent<Message, Message>) {}
 }

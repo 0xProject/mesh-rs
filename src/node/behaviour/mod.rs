@@ -19,7 +19,7 @@ mod order_sync;
 mod pubsub;
 
 use self::{
-    discovery::{Discovery, DiscoveryConfig},
+    discovery::{Discovery},
     order_sync::OrderSync,
     pubsub::PubSub,
 };
@@ -27,7 +27,7 @@ use crate::prelude::*;
 use libp2p::{identity::Keypair, swarm::NetworkBehaviourEventProcess, NetworkBehaviour};
 
 #[derive(NetworkBehaviour)]
-pub(crate) struct Behaviour {
+pub struct Behaviour {
     discovery:  Discovery,
     pubsub:     PubSub,
     order_sync: OrderSync,
@@ -48,5 +48,5 @@ impl Behaviour {
 }
 
 impl NetworkBehaviourEventProcess<()> for Behaviour {
-    fn inject_event(&mut self, event: ()) {}
+    fn inject_event(&mut self, _event: ()) {}
 }

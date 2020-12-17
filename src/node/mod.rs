@@ -7,7 +7,7 @@ use libp2p::{
     bandwidth::BandwidthSinks, core::network::NetworkInfo, gossipsub::Topic, identity,
     swarm::SwarmBuilder, Multiaddr, PeerId, Swarm,
 };
-use std::{collections::HashMap, sync::Arc};
+use std::{sync::Arc};
 
 const TOPIC: &str = "/0x-orders/version/3/chain/1/schema/e30=";
 
@@ -38,7 +38,7 @@ impl Node {
         });
 
         // Create a Swarm to manage peers and events.
-        let mut swarm: Swarm<Behaviour> = SwarmBuilder::new(transport, behaviour, peer_id)
+        let swarm: Swarm<Behaviour> = SwarmBuilder::new(transport, behaviour, peer_id)
             .executor(executor)
             .build();
 
@@ -58,7 +58,7 @@ impl Node {
         // info!("Kademlia Bootstrap query {:?}", bootstrap);
 
         // Subscribe to orders
-        let topic = Topic::new(TOPIC.into());
+        let _topic = Topic::new(TOPIC.into());
         // self.swarm.pubsub.subscribe(topic);
 
         // Listen on all interfaces and whatever port the OS assigns
