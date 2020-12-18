@@ -1,3 +1,7 @@
+//! # To do
+//!
+//! * Move OrderSync channel stuff to it's behaviour.
+
 // How to handle external and internal events in parallel?
 // See https://github.com/libp2p/rust-libp2p/issues/1876
 
@@ -8,8 +12,12 @@
 mod behaviour;
 mod transport;
 
-use self::{behaviour::Behaviour, transport::make_transport};
+use self::{
+    behaviour::{order_sync, Behaviour},
+    transport::make_transport,
+};
 use crate::prelude::*;
+use futures::channel::{mpsc, oneshot};
 use humansize::{file_size_opts::DECIMAL, FileSize};
 use libp2p::{
     bandwidth::BandwidthSinks, core::network::NetworkInfo, gossipsub::Topic, identity,
@@ -17,9 +25,36 @@ use libp2p::{
 };
 use std::sync::Arc;
 
+type OrderSyncRequest = (
+    PeerId,
+    order_sync::messages::Request,
+    oneshot::Sender<order_sync::Result>,
+);
+
+/// TODO: Impl Debug
 pub struct Node {
     bandwidth_monitor: Arc<BandwidthSinks>,
     swarm:             Swarm<Behaviour>,
+
+    order_sync_sender:   mpsc::Sender<OrderSyncRequest>,
+    order_sync_receiver: mpsc::Receiver<OrderSyncRequest>,
+}
+
+#[derive(Clone)]
+pub struct OrderSyncRpc {
+    sender: mpsc::Sender<OrderSyncRequest>,
+}
+
+impl OrderSyncRpc {
+    pub async fn call(
+        &mut self,
+        peer_id: PeerId,
+        request: order_sync::messages::Request,
+    ) -> order_sync::Result {
+        let (sender, receiver) = oneshot::channel();
+        self.sender.send((peer_id, request, sender)).await?;
+        receiver.await?
+    }
 }
 
 impl Node {
@@ -48,9 +83,15 @@ impl Node {
             .executor(executor)
             .build();
 
+        // Create a channel for OrderSync requests
+        let request_buffer_size = 16;
+        let (order_sync_sender, order_sync_receiver) = mpsc::channel(request_buffer_size);
+
         Ok(Self {
             bandwidth_monitor,
             swarm,
+            order_sync_sender,
+            order_sync_receiver,
         })
     }
 
@@ -70,11 +111,23 @@ impl Node {
         Ok(())
     }
 
+    /// Create a Send + Sync handle to the OrderSync RPC interface.
+    pub fn order_sync_rpc(&self) -> OrderSyncRpc {
+        OrderSyncRpc {
+            sender: self.order_sync_sender.clone(),
+        }
+    }
+
     /// Drive the event loop forward
     pub async fn run(&mut self) -> Result<()> {
-        tokio::select! {
-            _ = self.swarm.next() => Ok(()),
+        let order_sync_request = tokio::select! {
+            _ = self.swarm.next() => None,
+            r = self.order_sync_receiver.next() => r,
+        };
+        if let Some((peer_id, request, sender)) = order_sync_request {
+            self.swarm.order_sync_send(&peer_id, request, sender);
         }
+        Ok(())
     }
 }
 
@@ -106,14 +159,34 @@ pub async fn run() -> Result<()> {
     let mut node = Node::new(peer_id_keys).await.context("Creating node")?;
     node.start()?;
 
+    let mut order_sync_rpc = node.order_sync_rpc();
+
     // Catch SIGTERM so the container can shutdown without an init process.
     let sigterm = tokio::signal::ctrl_c();
     tokio::pin!(sigterm);
+
+    // Fetch orders from node
+    let fetch = async {
+        let peer_id = "16Uiu2HAkzEEu7Qpv8WK2XwpfiyrAdnJYDJWqd1Qz67RvLRe9veYv".parse()?;
+        // TODO: We need to find and query this peer first.
+
+        let request = order_sync::messages::Request::default();
+        let response = order_sync_rpc.call(peer_id, request).await?;
+        info!("Received response: {:#?}", response);
+
+        anyhow::Result::<()>::Ok(())
+    }
+    .fuse();
+    tokio::pin!(fetch);
 
     // Kick it off
     loop {
         tokio::select! {
             _ = node.run() => {
+            },
+            result = &mut fetch  => match result {
+                Err(err) => error!("OrderSync fetch failed: {}", err),
+                Ok(()) => info!("OrderSync fetch finished succesfully.")
             },
             _ = &mut sigterm => {
                 info!("SIGTERM received, shutting down");

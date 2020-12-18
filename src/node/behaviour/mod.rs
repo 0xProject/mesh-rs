@@ -15,11 +15,12 @@
 //! * `/floodsub/1.0.0`
 
 mod discovery;
-mod order_sync;
+pub mod order_sync;
 mod pubsub;
 
 use self::{discovery::Discovery, order_sync::OrderSync, pubsub::PubSub};
 use crate::prelude::*;
+use futures::channel::oneshot;
 use libp2p::{
     identity::Keypair, request_response, swarm::NetworkBehaviourEventProcess, NetworkBehaviour,
     PeerId,
@@ -49,6 +50,15 @@ impl Behaviour {
         self.discovery.start()?;
         self.pubsub.start();
         Ok(())
+    }
+
+    pub fn order_sync_send(
+        &mut self,
+        peer_id: &PeerId,
+        request: order_sync::messages::Request,
+        sender: oneshot::Sender<order_sync::Result>,
+    ) {
+        self.order_sync.send(peer_id, request, sender);
     }
 }
 

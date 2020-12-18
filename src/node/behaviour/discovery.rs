@@ -120,7 +120,26 @@ impl NetworkBehaviourEventProcess<KademliaEvent> for Discovery {
 }
 
 impl NetworkBehaviourEventProcess<IdentifyEvent> for Discovery {
-    fn inject_event(&mut self, _event: IdentifyEvent) {}
+    fn inject_event(&mut self, event: IdentifyEvent) {
+        match event {
+            IdentifyEvent::Received {
+                peer_id,
+                info,
+                observed_addr,
+            } => {
+                info!("Learned about {} at {}: {:?}", peer_id, observed_addr, info);
+            }
+            IdentifyEvent::Sent { peer_id } => {
+                debug!("Sent identify info to {}", peer_id);
+            }
+            IdentifyEvent::Error { peer_id, error } => {
+                warn!(
+                    "Error in identify protocol from peer {}: {}",
+                    peer_id, error
+                );
+            }
+        }
+    }
 }
 
 impl NetworkBehaviourEventProcess<PingEvent> for Discovery {

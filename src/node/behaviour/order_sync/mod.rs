@@ -29,7 +29,7 @@ use self::{
     messages::{Message, Request, Response},
 };
 use crate::prelude::*;
-use futures::channel::oneshot;
+use futures::channel::{mpsc, oneshot};
 use libp2p::{
     core::ProtocolName,
     request_response::{
@@ -57,11 +57,33 @@ pub enum Error {
     #[error("Expected a Response message, but received a Request.")]
     UnexpectedRequest,
 
-    #[error("OrderSync got dropped before request was handled.")]
-    Cancelled,
+    #[error("OrderSync dropped before request was handled.")]
+    Dropped,
+
+    #[error("OrderSync send queue is full.")]
+    QueueFull,
 
     #[error("Failure during request: {0:?}")]
     OutboundFailure(OutboundFailure),
+
+    #[error("Unknown send error: {0}")]
+    SendError(mpsc::SendError),
+}
+
+impl From<mpsc::SendError> for Error {
+    fn from(err: mpsc::SendError) -> Self {
+        match err {
+            err if err.is_full() => Error::QueueFull,
+            err if err.is_disconnected() => Error::Dropped,
+            err => Error::SendError(err),
+        }
+    }
+}
+
+impl From<oneshot::Canceled> for Error {
+    fn from(_err: oneshot::Canceled) -> Self {
+        Error::Dropped
+    }
 }
 
 #[derive(NetworkBehaviour)]
