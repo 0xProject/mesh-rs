@@ -57,7 +57,7 @@ pub enum Error {
     #[error("Expected a Response message, but received a Request.")]
     UnexpectedRequest,
 
-    #[error("OrderSync got dropped before request was handeled.")]
+    #[error("OrderSync got dropped before request was handled.")]
     Cancelled,
 
     #[error("Failure during request: {0:?}")]
@@ -81,6 +81,15 @@ impl OrderSync {
             pending_requests: HashMap::new(),
         }
     }
+
+    pub fn send(&mut self, peer_id: &PeerId, request: Request, sender: oneshot::Sender<Result>) {
+        let message = Message::Request(request);
+        let request_id = self.request_response.send_request(peer_id, message);
+        let existing = self.pending_requests.insert(request_id, sender);
+        if let Some(exisiting) = existing {
+            error!("Pending request with same id already exists, dropping.");
+        }
+    }
 }
 
 impl ProtocolName for Version {
@@ -99,10 +108,23 @@ impl NetworkBehaviourEventProcess<Event> for OrderSync {
                     RequestResponseMessage::Request {
                         request_id,
                         request,
-                        channel,
+                        channel: _,
                     },
             } => {
-                warn!("Incoming requests are not handled (unimplemented).");
+                let request = match request {
+                    Message::Request(request) => request,
+                    Message::Response(_) => {
+                        warn!(
+                            "Received Response object as request from {}, ignoring",
+                            peer
+                        );
+                        return;
+                    }
+                };
+                error!(
+                    "Incoming request {} {:?} from {} not handled (unimplemented).",
+                    request_id, request, peer
+                );
             }
 
             // Receive incoming response.
@@ -114,16 +136,22 @@ impl NetworkBehaviourEventProcess<Event> for OrderSync {
                         response,
                     },
             } => {
-                if let Some(sender) = self.pending_requests.remove(&request_id) {
-                    sender.send(match response {
-                        Message::Request(_) => Err(Error::UnexpectedRequest),
-                        Message::Response(res) => Ok(res),
-                    });
-                } else {
-                    error!(
-                        "Received response for unexpected request id {} from peer {}",
-                        request_id, peer
-                    );
+                let sender = match self.pending_requests.remove(&request_id) {
+                    Some(sender) => sender,
+                    None => {
+                        error!(
+                            "Received response for unexpected request id {} from peer {}",
+                            request_id, peer
+                        );
+                        return;
+                    }
+                };
+                let result = match response {
+                    Message::Request(_) => Err(Error::UnexpectedRequest),
+                    Message::Response(response) => Ok(response),
+                };
+                if let Err(_result) = sender.send(result) {
+                    warn!("Received response for dropped handler, dropping response");
                 }
             }
 
@@ -133,13 +161,19 @@ impl NetworkBehaviourEventProcess<Event> for OrderSync {
                 request_id,
                 error,
             } => {
-                if let Some(sender) = self.pending_requests.remove(&request_id) {
-                    sender.send(Err(Error::OutboundFailure(error)));
-                } else {
-                    error!(
-                        "Failure for unexpected outbound request id {} from peer {}: {:?}",
-                        request_id, peer, error
-                    );
+                let sender = match self.pending_requests.remove(&request_id) {
+                    Some(sender) => sender,
+                    None => {
+                        error!(
+                            "Failure for unexpected outbound request id {} from peer {}: {:?}",
+                            request_id, peer, error
+                        );
+                        return;
+                    }
+                };
+                let result = Err(Error::OutboundFailure(error));
+                if let Err(_result) = sender.send(result) {
+                    warn!("Received outbound failure for dropped handler");
                 }
             }
 
@@ -157,7 +191,10 @@ impl NetworkBehaviourEventProcess<Event> for OrderSync {
             }
 
             // A response to an inbound request has been sent.
-            RequestResponseEvent::ResponseSent { request_id, peer } => {}
+            RequestResponseEvent::ResponseSent {
+                request_id: _,
+                peer: _,
+            } => {}
         }
     }
 }
