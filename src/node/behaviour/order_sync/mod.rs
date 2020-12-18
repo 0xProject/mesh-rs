@@ -108,7 +108,7 @@ impl OrderSync {
         let message = Message::Request(request);
         let request_id = self.request_response.send_request(peer_id, message);
         let existing = self.pending_requests.insert(request_id, sender);
-        if let Some(exisiting) = existing {
+        if let Some(_existing) = existing {
             error!("Pending request with same id already exists, dropping.");
         }
     }

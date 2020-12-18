@@ -33,3 +33,4 @@ https://docs.rs/libp2p/0.32.2/libp2p/
 
 
 RUST_LOG="info,libp2p_core::upgrade=info,libp2p_core=debug,mesh=debug"
+libp2p_gossipsub::behaviour

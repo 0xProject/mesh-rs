@@ -17,6 +17,10 @@ mod prelude {
 use prelude::*;
 use structopt::StructOpt;
 
+// Gossipsub is very noisy, so limit it to warn by default even if
+// verbose flags are given. This can be overuled using the environment flags.
+const DEFAULT_LOG: &str = "libp2p_gossipsub::behaviour=warn";
+
 #[derive(Debug, PartialEq, StructOpt)]
 struct Options {
     /// Verbose mode (-v, -vv, -vvv, etc.)
@@ -63,12 +67,13 @@ pub fn main() -> Result<()> {
         0 => "error",
         1 => "warn",
         2 => "info",
+        3 => "info,mesh=debug",
         3 => "debug",
-        _ => "trace",
+        _ => "trace,libp2p_gossipsub::behaviour=trace",
     };
     let rust_log_env = std::env::var("RUST_LOG").map_or_else(
-        |_| rust_log.to_string(),
-        |arg| format!("{},{}", rust_log, arg),
+        |_| format!("{},{}", rust_log, DEFAULT_LOG),
+        |arg| format!("{},{},{}", rust_log, DEFAULT_LOG, arg),
     );
     std::env::set_var("RUST_LOG", rust_log_env);
     env_logger::init();

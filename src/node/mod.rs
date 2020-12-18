@@ -18,12 +18,12 @@ use self::{
 };
 use crate::prelude::*;
 use futures::channel::{mpsc, oneshot};
-use humansize::{file_size_opts::DECIMAL, FileSize};
 use libp2p::{
     bandwidth::BandwidthSinks, core::network::NetworkInfo, gossipsub::Topic, identity,
     swarm::SwarmBuilder, Multiaddr, PeerId, Swarm,
 };
 use std::sync::Arc;
+use ubyte::ToByteUnit;
 
 type OrderSyncRequest = (
     PeerId,
@@ -201,8 +201,8 @@ pub async fn run() -> Result<()> {
     info!("Listening on: {:?}", node.listeners().collect::<Vec<_>>());
     info!(
         "Bandwidth: {} inbound, {} outbound",
-        node.total_inbound().file_size(DECIMAL).unwrap(),
-        node.total_outbound().file_size(DECIMAL).unwrap()
+        node.total_inbound().bytes(),
+        node.total_outbound().bytes()
     );
     Ok(())
 }
