@@ -9,6 +9,11 @@ use std::io::{Error, ErrorKind, Result};
 ///
 /// TODO: Maximum size
 ///
+/// TODO: Use `Stream::size_hint()` ?
+///
+/// TODO: Implement a wrapper for AsyncRead that reads all available content
+/// untill it would block.
+///
 /// TODO: Remove once Serde gains async support.
 /// See <https://github.com/serde-rs/json/issues/316>
 pub async fn read_json<R, T>(io: &mut R) -> Result<T>
@@ -20,7 +25,7 @@ where
     let mut buffer = Vec::new();
     loop {
         // Read another (partial) block
-        let mut block = [0_u8; 1024];
+        let mut block = [0_u8; 30_000]; // Try large blocks to limit decoding attempts
         let n = match io.read(&mut block).await {
             Ok(0) => {
                 Err(Error::new(

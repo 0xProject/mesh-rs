@@ -13,6 +13,7 @@
 //! * Persistently store known peers for quick restart.
 //! * Distinguish between local and global addresses, only feed global ones to
 //!   DHT.
+//! * Observed addresses protocol: https://docs.rs/libp2p-observed-address/0.12.0/libp2p_observed_address/
 
 use crate::prelude::*;
 use libp2p::{
@@ -96,6 +97,17 @@ impl Discovery {
             identify,
             ping,
         })
+    }
+
+    pub fn start(&mut self) -> Result<()> {
+        // Join DHT
+        let bootstrap = self.kademlia.bootstrap().context("Joining Kademlia DHT")?;
+        info!("Kademlia Bootstrap query {:?}", bootstrap);
+
+        // Start searching for random nodes
+        // TODO: self.swarm.search_random_peer();
+
+        Ok(())
     }
 }
 

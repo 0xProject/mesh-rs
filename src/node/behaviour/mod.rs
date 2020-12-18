@@ -20,7 +20,10 @@ mod pubsub;
 
 use self::{discovery::Discovery, order_sync::OrderSync, pubsub::PubSub};
 use crate::prelude::*;
-use libp2p::{identity::Keypair, swarm::NetworkBehaviourEventProcess, NetworkBehaviour};
+use libp2p::{
+    identity::Keypair, request_response, swarm::NetworkBehaviourEventProcess, NetworkBehaviour,
+    PeerId,
+};
 
 #[derive(NetworkBehaviour)]
 pub struct Behaviour {
@@ -40,6 +43,12 @@ impl Behaviour {
             pubsub,
             order_sync,
         })
+    }
+
+    pub fn start(&mut self) -> Result<()> {
+        self.discovery.start()?;
+        self.pubsub.start();
+        Ok(())
     }
 }
 

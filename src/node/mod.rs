@@ -1,15 +1,21 @@
+// How to handle external and internal events in parallel?
+// See https://github.com/libp2p/rust-libp2p/issues/1876
+
+// How to emit out events:
+// See https://github.com/libp2p/rust-libp2p/issues/983
+// See https://github.com/libp2p/rust-libp2p/issues/1021
+
 mod behaviour;
 mod transport;
 
 use self::{behaviour::Behaviour, transport::make_transport};
 use crate::prelude::*;
+use humansize::{file_size_opts::DECIMAL, FileSize};
 use libp2p::{
     bandwidth::BandwidthSinks, core::network::NetworkInfo, gossipsub::Topic, identity,
     swarm::SwarmBuilder, Multiaddr, PeerId, Swarm,
 };
 use std::sync::Arc;
-
-const TOPIC: &str = "/0x-orders/version/3/chain/1/schema/e30=";
 
 pub struct Node {
     bandwidth_monitor: Arc<BandwidthSinks>,
@@ -49,17 +55,8 @@ impl Node {
     }
 
     pub fn start(&mut self) -> Result<()> {
-        // Join DHT
-        // let bootstrap = self
-        //     .swarm
-        //     .kademlia
-        //     .bootstrap()
-        //     .context("Joining Kademlia DHT")?;
-        // info!("Kademlia Bootstrap query {:?}", bootstrap);
-
-        // Subscribe to orders
-        let _topic = Topic::new(TOPIC.into());
-        // self.swarm.pubsub.subscribe(topic);
+        // Start behaviours
+        self.swarm.start()?;
 
         // Listen on all interfaces and whatever port the OS assigns
         Swarm::listen_on(
@@ -69,9 +66,6 @@ impl Node {
                 .context("Parsing listening address")?,
         )
         .context("Starting to listen")?;
-
-        // Start searching for random nodes
-        // TODO: self.swarm.search_random_peer();
 
         Ok(())
     }
@@ -128,13 +122,14 @@ pub async fn run() -> Result<()> {
             }
         }
     }
+
+    // Log final stats
     info!("Network: {:?}", node.network_info());
-    info!("Done.");
+    info!("Listening on: {:?}", node.listeners().collect::<Vec<_>>());
     info!(
         "Bandwidth: {} inbound, {} outbound",
-        node.total_inbound(),
-        node.total_outbound()
+        node.total_inbound().file_size(DECIMAL).unwrap(),
+        node.total_outbound().file_size(DECIMAL).unwrap()
     );
-    info!("Orders saved");
     Ok(())
 }
