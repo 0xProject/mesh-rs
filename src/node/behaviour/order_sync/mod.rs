@@ -146,8 +146,8 @@ impl NetworkBehaviourEventProcess<Event> for OrderSync {
                     }
                 };
                 error!(
-                    "Incoming request {} {:?} from {} not handled (unimplemented).",
-                    request_id, request, peer
+                    "Incoming request {} from {} not handled (unimplemented): {:#?}",
+                    request_id, peer, request
                 );
             }
 

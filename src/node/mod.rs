@@ -198,14 +198,17 @@ pub async fn run() -> Result<()> {
 
         // First fetch
         let mut orders = Vec::new();
-        let mut maybe_request = Some(order_sync::messages::Request::default());
-        while let Some(request) = maybe_request {
-            info!("Request: {:#?}", &request);
-            let response = order_sync_rpc.call(peer_id.clone(), request).await?;
-            info!("Received response {} orders complete: {:?}, metadata: {:?}", response.orders.len(), response.complete, response.metadata);
-            maybe_request = response.next_request();
-            orders.extend(response.orders);
-            info!("Last order: {}", orders.last().unwrap().signature);
+        let order_filter = order_sync::messages::OrderFilter::mainnet_v3();
+        if true {
+            let mut maybe_request = Some(order_filter.clone().into());
+            while let Some(request) = maybe_request {
+                info!("Request: {:#?}", &request);
+                let response = order_sync_rpc.call(peer_id.clone(), request).await?;
+                info!("Received response {} orders complete: {:?}, metadata: {:#?}", response.orders.len(), response.complete, response.metadata);
+                maybe_request = response.next_request(order_filter.clone());
+                orders.extend(response.orders);
+                info!("Last order: {}", orders.last().unwrap().signature);
+            }
         }
         info!("Fetched {} orders", orders.len());
         anyhow::Result::<_>::Ok(orders)

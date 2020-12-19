@@ -157,9 +157,9 @@ impl Default for Response {
 }
 
 impl Response {
-    pub fn next_request(&self) -> Option<Request> {
+    pub fn next_request(&self, order_filter: OrderFilter) -> Option<Request> {
         if self.complete { None } else {
-            Some(self.metadata.next_request_metadata().into())
+            Some(self.metadata.next_request_metadata(order_filter).into())
         }
     }
 }
@@ -215,13 +215,13 @@ impl RequestMetadata {
 }
 
 impl ResponseMetadata {
-    fn next_request_metadata(&self) -> RequestMetadata {
+    fn next_request_metadata(&self, order_filter:OrderFilter) -> RequestMetadata {
         match self {
             ResponseMetadata::V0 { page, snapshot_id } => {
                 RequestMetadata::V0 {
                     page: page + 1,
                     snapshot_id: snapshot_id.clone(),
-                    order_filter: OrderFilter::default(),
+                    order_filter,
                 }
             }
             ResponseMetadata::V1 {
@@ -229,7 +229,7 @@ impl ResponseMetadata {
             } => {
                 RequestMetadata::V1 {
                     min_order_hash: next_min_order_hash.clone(),
-                    order_filter:   OrderFilter::default(),
+                    order_filter,
                 }
             }
         }
