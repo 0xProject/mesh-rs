@@ -39,7 +39,7 @@ use libp2p::{
     swarm::NetworkBehaviourEventProcess,
     NetworkBehaviour, PeerId,
 };
-use std::{collections::HashMap, iter};
+use std::{collections::HashMap, iter, time::Duration};
 
 /// Maximum message size
 const MAX_SIZE: usize = 1024;
@@ -95,9 +95,11 @@ pub struct OrderSync {
 }
 
 impl OrderSync {
-    pub fn new(config: Config) -> Self {
+    pub fn new() -> Self {
         let protocols = iter::once((Version(), ProtocolSupport::Full));
         let codec = JsonCodec::default();
+        let mut config = Config::default();
+        config.set_request_timeout(Duration::from_secs(30)); // Same as Go 0x-mesh
         Self {
             request_response: RequestResponse::new(codec, protocols, config),
             pending_requests: HashMap::new(),

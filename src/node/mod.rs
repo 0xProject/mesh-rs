@@ -13,7 +13,7 @@ mod behaviour;
 mod transport;
 
 use self::{
-    behaviour::{order_sync, Behaviour},
+    behaviour::{order_sync, Behaviour, discovery::PeerInfo},
     transport::make_transport,
 };
 use crate::prelude::*;
@@ -22,8 +22,12 @@ use libp2p::{
     bandwidth::BandwidthSinks, core::network::NetworkInfo, gossipsub::Topic, identity,
     swarm::SwarmBuilder, Multiaddr, PeerId, Swarm,
 };
-use std::sync::Arc;
 use ubyte::ToByteUnit;
+use tokio::time::sleep;
+use std::time::Duration;
+use std::sync::{Arc, RwLock};
+use std::collections::HashMap;
+
 
 type OrderSyncRequest = (
     PeerId,
@@ -152,6 +156,11 @@ impl Node {
     pub fn total_outbound(&self) -> u64 {
         self.bandwidth_monitor.total_outbound()
     }
+
+    /// Return a handle to the peer database
+    pub fn known_peers(&self) -> Arc<RwLock<HashMap<PeerId, PeerInfo>>> {
+        self.swarm.known_peers()
+    }
 }
 
 pub async fn run() -> Result<()> {
@@ -159,6 +168,7 @@ pub async fn run() -> Result<()> {
     let mut node = Node::new(peer_id_keys).await.context("Creating node")?;
     node.start()?;
 
+    let known_peers = node.known_peers();
     let mut order_sync_rpc = node.order_sync_rpc();
 
     // Catch SIGTERM so the container can shutdown without an init process.
@@ -166,15 +176,39 @@ pub async fn run() -> Result<()> {
     tokio::pin!(sigterm);
 
     // Fetch orders from node
+    // 16Uiu2HAkzQUGvnR21snR3HSsfCgYFkUJn4LzSSSkNbBwefwfdtT8
     let fetch = async {
-        let peer_id = "16Uiu2HAkzEEu7Qpv8WK2XwpfiyrAdnJYDJWqd1Qz67RvLRe9veYv".parse()?;
-        // TODO: We need to find and query this peer first.
+        // Find a peer that supports the order_sync protocol
+        let protocol: String = "/0x-mesh/order-sync/version/0".into();
+        let peer_id = 'outer: loop {
+            info!("Looking for peer to fetch from");
+            let lock = known_peers.read().unwrap();
+            for (peer_id, peer_info) in lock.iter() {
+                if let Some(identify_info) = &peer_info.identify {
+                    if identify_info.protocols.contains(&protocol) {
+                        break 'outer peer_id.clone();
+                    };
+                }
+            }
+            drop(lock);
+            info!("No peers found, wait and retry.");
+            sleep(Duration::from_secs(20)).await;
+        };
+        info!("Inquiring peer {}", &peer_id);
 
-        let request = order_sync::messages::Request::default();
-        let response = order_sync_rpc.call(peer_id, request).await?;
-        info!("Received response: {:#?}", response);
-
-        anyhow::Result::<()>::Ok(())
+        // First fetch
+        let mut orders = Vec::new();
+        let mut maybe_request = Some(order_sync::messages::Request::default());
+        while let Some(request) = maybe_request {
+            info!("Request: {:#?}", &request);
+            let response = order_sync_rpc.call(peer_id.clone(), request).await?;
+            info!("Received response {} orders complete: {:?}, metadata: {:?}", response.orders.len(), response.complete, response.metadata);
+            maybe_request = response.next_request();
+            orders.extend(response.orders);
+            info!("Last order: {}", orders.last().unwrap().signature);
+        }
+        info!("Fetched {} orders", orders.len());
+        anyhow::Result::<_>::Ok(orders)
     }
     .fuse();
     tokio::pin!(fetch);
@@ -186,7 +220,12 @@ pub async fn run() -> Result<()> {
             },
             result = &mut fetch  => match result {
                 Err(err) => error!("OrderSync fetch failed: {}", err),
-                Ok(()) => info!("OrderSync fetch finished succesfully.")
+                Ok(orders) => {
+                    info!("OrderSync fetch finished successfully with {} orders.", orders.len());
+                    
+                    let mut file = std::fs::File::create("order.json").unwrap();
+                    serde_json::to_writer_pretty(file, &orders).unwrap();
+                }
             },
             _ = &mut sigterm => {
                 info!("SIGTERM received, shutting down");
@@ -198,11 +237,14 @@ pub async fn run() -> Result<()> {
 
     // Log final stats
     info!("Network: {:?}", node.network_info());
-    info!("Listening on: {:?}", node.listeners().collect::<Vec<_>>());
+    info!("Listened on: {:?}", node.listeners().collect::<Vec<_>>());
     info!(
         "Bandwidth: {} inbound, {} outbound",
         node.total_inbound().bytes(),
         node.total_outbound().bytes()
     );
+    info!("Peers discovered: {:?}", known_peers.read().unwrap().len());
+    // TODO: Store and load peer info
+
     Ok(())
 }

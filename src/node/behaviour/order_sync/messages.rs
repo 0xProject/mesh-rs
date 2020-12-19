@@ -156,6 +156,15 @@ impl Default for Response {
     }
 }
 
+impl Response {
+    pub fn next_request(&self) -> Option<Request> {
+        if self.complete { None } else {
+            Some(self.metadata.next_request_metadata().into())
+        }
+    }
+}
+
+
 impl From<OrderFilter> for Request {
     fn from(order_filter: OrderFilter) -> Self {
         Self {
@@ -205,23 +214,34 @@ impl RequestMetadata {
     }
 }
 
-impl From<ResponseMetadata> for RequestMetadata {
-    fn from(response: ResponseMetadata) -> Self {
-        match response {
+impl ResponseMetadata {
+    fn next_request_metadata(&self) -> RequestMetadata {
+        match self {
             ResponseMetadata::V0 { page, snapshot_id } => {
-                Self::V0 {
+                RequestMetadata::V0 {
                     page: page + 1,
-                    snapshot_id,
+                    snapshot_id: snapshot_id.clone(),
                     order_filter: OrderFilter::default(),
                 }
             }
             ResponseMetadata::V1 {
                 next_min_order_hash,
             } => {
-                Self::V1 {
-                    min_order_hash: next_min_order_hash,
+                RequestMetadata::V1 {
+                    min_order_hash: next_min_order_hash.clone(),
                     order_filter:   OrderFilter::default(),
                 }
+            }
+        }
+    }
+}
+
+impl From<RequestMetadata> for Request {
+    fn from(metadata: RequestMetadata) -> Self {
+        Self {
+            subprotocols: smallvec![metadata.sub_protocol_name().into()],
+            metadata: RequestMetadataContainer {
+                metadata: smallvec![metadata]
             }
         }
     }

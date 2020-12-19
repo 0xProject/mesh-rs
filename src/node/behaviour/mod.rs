@@ -14,17 +14,19 @@
 //! * `/libp2p/circuit/relay/0.1.0
 //! * `/floodsub/1.0.0`
 
-mod discovery;
+pub mod discovery;
 pub mod order_sync;
-mod pubsub;
+pub mod pubsub;
 
-use self::{discovery::Discovery, order_sync::OrderSync, pubsub::PubSub};
+use self::{discovery::{Discovery, PeerInfo}, order_sync::OrderSync, pubsub::PubSub};
 use crate::prelude::*;
 use futures::channel::oneshot;
 use libp2p::{
     identity::Keypair, request_response, swarm::NetworkBehaviourEventProcess, NetworkBehaviour,
     PeerId,
 };
+use std::sync::{Arc, RwLock};
+use std::collections::HashMap;
 
 #[derive(NetworkBehaviour)]
 pub struct Behaviour {
@@ -37,7 +39,7 @@ impl Behaviour {
     pub async fn new(peer_key: Keypair) -> Result<Self> {
         let discovery = Discovery::new(peer_key.clone()).await?;
         let pubsub = PubSub::new(peer_key);
-        let order_sync = OrderSync::new(order_sync::Config::default());
+        let order_sync = OrderSync::new();
 
         Ok(Self {
             discovery,
@@ -59,6 +61,11 @@ impl Behaviour {
         sender: oneshot::Sender<order_sync::Result>,
     ) {
         self.order_sync.send(peer_id, request, sender);
+    }
+
+
+    pub fn known_peers(&self) -> Arc<RwLock<HashMap<PeerId, PeerInfo>>> {
+        self.discovery.known_peers()
     }
 }
 

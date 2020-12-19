@@ -30,6 +30,7 @@ use libp2p::{
     Multiaddr, NetworkBehaviour, PeerId,
 };
 use std::{collections::HashMap, time::Duration};
+use std::sync::{Arc, RwLock};
 
 const DHT_PROTOCOL_ID: &[u8] = b"/0x-mesh-dht/version/1";
 const BOOTNODES: &[(&str, &str)] = &[
@@ -54,13 +55,13 @@ pub struct DiscoveryConfig {
 }
 #[derive(Clone, Debug)]
 pub struct PeerInfo {
-    peer_id: PeerId,
+    pub peer_id: PeerId,
 
     /// Latest Identify info
-    identify: Option<IdentifyInfo>,
+    pub identify: Option<IdentifyInfo>,
 
     /// Latest ping time with this node.
-    ping: Option<Duration>,
+    pub ping: Option<Duration>,
 }
 
 impl PeerInfo {
@@ -85,7 +86,7 @@ pub struct Discovery {
 
     /// Information that we know about all nodes.
     #[behaviour(ignore)]
-    nodes_info: HashMap<PeerId, PeerInfo>,
+    peer_info: Arc<RwLock<HashMap<PeerId, PeerInfo>>>,
 }
 
 impl Discovery {
@@ -125,7 +126,7 @@ impl Discovery {
             identify,
             ping,
             bootstrap_query_id: None,
-            nodes_info: HashMap::new(),
+            peer_info: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -139,6 +140,10 @@ impl Discovery {
         // TODO: self.swarm.search_random_peer();
 
         Ok(())
+    }
+
+    pub fn known_peers(&self) -> Arc<RwLock<HashMap<PeerId, PeerInfo>>> {
+        self.peer_info.clone()
     }
 }
 
@@ -242,16 +247,14 @@ impl NetworkBehaviourEventProcess<IdentifyEvent> for Discovery {
             IdentifyEvent::Received {
                 peer_id,
                 info,
-                observed_addr,
+                observed_addr: _,
             } => {
                 debug!(
-                    "Learned about {} at {}: {:?}",
-                    &peer_id, observed_addr, &info
+                    "Learned about {}",
+                    &peer_id
                 );
-                let entry = self
-                    .nodes_info
-                    .entry(peer_id.clone())
-                    .or_insert(PeerInfo::new(peer_id));
+                let mut lock = self.peer_info.write().unwrap(); // FIXME: Can block
+                let entry = lock.entry(peer_id.clone()).or_insert(PeerInfo::new(peer_id));
                 entry.identify = Some(info);
             }
             IdentifyEvent::Sent { peer_id } => {
@@ -271,15 +274,13 @@ impl NetworkBehaviourEventProcess<PingEvent> for Discovery {
     fn inject_event(&mut self, event: PingEvent) {
         match event.result {
             Ok(libp2p::ping::PingSuccess::Ping { rtt }) => {
-                debug!(
+                trace!(
                     "Pinged {} with round trip time {}",
                     &event.peer,
                     HumanDuration::from(rtt)
                 );
-                let entry = self
-                    .nodes_info
-                    .entry(event.peer.clone())
-                    .or_insert(PeerInfo::new(event.peer));
+                let mut lock = self.peer_info.write().unwrap(); // FIXME: Can block
+                let entry = lock.entry(event.peer.clone()).or_insert(PeerInfo::new(event.peer));
                 entry.ping = Some(rtt);
             }
             Ok(libp2p::ping::PingSuccess::Pong) => {
